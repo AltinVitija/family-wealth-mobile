@@ -1,8 +1,7 @@
-// types/navigation.ts
-import { ROUTES } from "src/utils/constants";
-import { NavigatorScreenParams } from "@react-navigation/native";
-import { BottomTabScreenProps } from "@react-navigation/bottom-tabs";
-import { StackScreenProps } from "@react-navigation/stack";
+import { ROUTES } from 'src/utils/constants';
+import { NavigatorScreenParams } from '@react-navigation/native';
+import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
+import { StackScreenProps } from '@react-navigation/stack';
 
 // Root Stack (Auth + Main)
 export type RootStackParamList = {
@@ -46,10 +45,7 @@ export type FamilyStackParamList = {
 };
 
 // Screen Props Types
-export type DashboardScreenProps = BottomTabScreenProps<
-  MainTabParamList,
-  typeof ROUTES.DASHBOARD
->;
+export type DashboardScreenProps = BottomTabScreenProps<MainTabParamList, typeof ROUTES.DASHBOARD>;
 export type EstateDetailScreenProps = StackScreenProps<
   EstateStackParamList,
   typeof ROUTES.ESTATE_DETAIL
