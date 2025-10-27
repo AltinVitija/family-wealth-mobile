@@ -9,6 +9,7 @@ import {
   Alert,
   ActivityIndicator,
   RefreshControl,
+  StatusBar,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useDispatch, useSelector } from 'react-redux';
@@ -37,6 +38,7 @@ const DashboardScreen = () => {
   } = useSelector((state: RootState) => state.dashboardReducer);
   const { goals } = useSelector((state: RootState) => state.financialGoals);
   const { members } = useSelector((state: RootState) => state.familyMembers);
+  const { plans } = useSelector((state: RootState) => state.estatePlans);
 
   const [refreshing, setRefreshing] = useState(false);
 
@@ -104,6 +106,43 @@ const DashboardScreen = () => {
     }).format(amount);
   };
 
+  const formatDate = (dateString: string) => {
+    if (!dateString) return '';
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' });
+  };
+
+  const calculateTotalAssets = (assets?: any[]) => {
+    if (!assets || !Array.isArray(assets)) return 0;
+    return assets.reduce((sum, asset) => sum + (asset.value || 0), 0);
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'active':
+        return '#10B981';
+      case 'draft':
+        return '#F59E0B';
+      case 'archived':
+        return '#6B7280';
+      default:
+        return '#64748B';
+    }
+  };
+
+  const getStatusLabel = (status: string) => {
+    switch (status) {
+      case 'active':
+        return 'Active';
+      case 'draft':
+        return 'Draft';
+      case 'archived':
+        return 'Archived';
+      default:
+        return status;
+    }
+  };
+
   const renderStatCard = (title: string, value: string | number, icon: string, color: string) => {
     return (
       <View style={[styles.statCard, { borderLeftColor: color }]}>
@@ -128,8 +167,13 @@ const DashboardScreen = () => {
     );
   };
 
+  // Get active estate plans
+  const activePlans = plans.filter((plan: any) => plan.status === 'active');
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
+      <StatusBar barStyle="dark-content" backgroundColor="#fff" />
+
       {/* Header */}
       <View style={styles.header}>
         <View>
@@ -203,16 +247,89 @@ const DashboardScreen = () => {
               </View>
             </View>
 
+            {/* Active Estate Plans */}
+            {activePlans.length > 0 && (
+              <View style={styles.section}>
+                <View style={styles.sectionHeader}>
+                  <Text style={styles.sectionTitle}>Active Estate Plans</Text>
+                  <TouchableOpacity onPress={() => navigation.navigate('Estate')}>
+                    <Text style={styles.seeAllText}>See All</Text>
+                  </TouchableOpacity>
+                </View>
+                {activePlans.slice(0, 2).map((plan: any) => (
+                  <TouchableOpacity
+                    key={plan._id}
+                    style={styles.estatePlanCard}
+                    onPress={() => navigation.navigate('Estate')}
+                    activeOpacity={0.7}>
+                    <View style={styles.estatePlanHeader}>
+                      <View style={styles.estatePlanTitleRow}>
+                        <Text style={styles.estatePlanTitle} numberOfLines={1}>
+                          {plan.title || 'Untitled Plan'}
+                        </Text>
+                        <View
+                          style={[
+                            styles.estatePlanBadge,
+                            { backgroundColor: getStatusColor(plan.status) },
+                          ]}>
+                          <Text style={styles.estatePlanBadgeText}>
+                            {getStatusLabel(plan.status)}
+                          </Text>
+                        </View>
+                      </View>
+                      {plan.updatedAt && (
+                        <Text style={styles.estatePlanSubtitle}>
+                          Last updated: {formatDate(plan.updatedAt)}
+                        </Text>
+                      )}
+                    </View>
+
+                    <View style={styles.estatePlanStats}>
+                      <View style={styles.estatePlanStat}>
+                        <Text style={styles.estatePlanStatValue}>
+                          {Array.isArray(plan.assets) ? plan.assets.length : 0}
+                        </Text>
+                        <Text style={styles.estatePlanStatLabel}>Assets</Text>
+                      </View>
+                      <View style={styles.estatePlanStat}>
+                        <Text style={styles.estatePlanStatValue}>
+                          {Array.isArray(plan.beneficiaries) ? plan.beneficiaries.length : 0}
+                        </Text>
+                        <Text style={styles.estatePlanStatLabel}>Beneficiaries</Text>
+                      </View>
+                      <View style={styles.estatePlanStat}>
+                        <Text style={styles.estatePlanStatValue}>
+                          {formatCurrency(calculateTotalAssets(plan.assets))}
+                        </Text>
+                        <Text style={styles.estatePlanStatLabel}>Total Value</Text>
+                      </View>
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+
             {/* Recent Goals */}
             {goals.length > 0 && (
               <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Recent Goals</Text>
+                <View style={styles.sectionHeader}>
+                  <Text style={styles.sectionTitle}>Recent Goals</Text>
+                  <TouchableOpacity onPress={() => navigation.navigate('Goals')}>
+                    <Text style={styles.seeAllText}>See All</Text>
+                  </TouchableOpacity>
+                </View>
                 {goals.slice(0, 3).map((goal: any) => {
                   const progress = Math.round((goal.currentAmount / goal.targetAmount) * 100);
                   return (
-                    <View key={goal._id} style={styles.recentGoalCard}>
+                    <TouchableOpacity
+                      key={goal._id}
+                      style={styles.recentGoalCard}
+                      onPress={() => navigation.navigate('Goals')}
+                      activeOpacity={0.7}>
                       <View style={styles.recentGoalHeader}>
-                        <Text style={styles.recentGoalTitle}>{goal.title}</Text>
+                        <Text style={styles.recentGoalTitle} numberOfLines={1}>
+                          {goal.title}
+                        </Text>
                         <Text style={styles.recentGoalProgress}>{progress}%</Text>
                       </View>
                       <View style={styles.recentGoalProgressBar}>
@@ -221,22 +338,25 @@ const DashboardScreen = () => {
                       <Text style={styles.recentGoalAmount}>
                         {formatCurrency(goal.currentAmount)} of {formatCurrency(goal.targetAmount)}
                       </Text>
-                    </View>
+                    </TouchableOpacity>
                   );
                 })}
               </View>
             )}
 
             {/* Empty State */}
-            {goals.length === 0 && members.length === 0 && (
+            {goals.length === 0 && members.length === 0 && activePlans.length === 0 && (
               <View style={styles.emptyState}>
                 <Text style={styles.emptyStateIcon}>🚀</Text>
                 <Text style={styles.emptyStateTitle}>Get Started!</Text>
                 <Text style={styles.emptyStateText}>
-                  Start by adding your first goal or family member
+                  Start by adding your first goal, family member, or estate plan
                 </Text>
               </View>
             )}
+
+            {/* Bottom Spacer */}
+            <View style={styles.bottomSpacer} />
           </>
         )}
       </ScrollView>
@@ -285,6 +405,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: 16,
+    paddingBottom: 40,
   },
   loader: {
     marginTop: 40,
@@ -326,11 +447,21 @@ const styles = StyleSheet.create({
   section: {
     marginBottom: 24,
   },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
   sectionTitle: {
     fontSize: 18,
     fontWeight: 'bold',
     color: '#000',
-    marginBottom: 12,
+  },
+  seeAllText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#d4b038',
   },
   financialCard: {
     backgroundColor: '#fff',
@@ -403,6 +534,70 @@ const styles = StyleSheet.create({
     color: '#fff',
     textAlign: 'center',
   },
+  // Estate Plan Card Styles
+  estatePlanCard: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  estatePlanHeader: {
+    marginBottom: 16,
+  },
+  estatePlanTitleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  estatePlanTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#000',
+    flex: 1,
+    marginRight: 12,
+  },
+  estatePlanBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  estatePlanBadgeText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#fff',
+  },
+  estatePlanSubtitle: {
+    fontSize: 12,
+    color: '#666',
+  },
+  estatePlanStats: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#f0f0f0',
+  },
+  estatePlanStat: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  estatePlanStatValue: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#000',
+    marginBottom: 4,
+  },
+  estatePlanStatLabel: {
+    fontSize: 11,
+    color: '#666',
+  },
+  // Recent Goals Styles
   recentGoalCard: {
     backgroundColor: '#fff',
     borderRadius: 12,
@@ -425,6 +620,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#000',
     flex: 1,
+    marginRight: 12,
   },
   recentGoalProgress: {
     fontSize: 18,
@@ -467,6 +663,10 @@ const styles = StyleSheet.create({
     color: '#666',
     textAlign: 'center',
     paddingHorizontal: 40,
+    lineHeight: 20,
+  },
+  bottomSpacer: {
+    height: 40,
   },
 });
 

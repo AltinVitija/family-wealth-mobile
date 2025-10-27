@@ -14,6 +14,8 @@ export interface DashboardOverview {
   totalTargetAmount: number;
   totalCurrentAmount: number;
   averageGoalProgress: number;
+  totalTasks: number;
+  pendingTasks: number;
 }
 
 // ============================================

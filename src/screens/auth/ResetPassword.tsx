@@ -11,22 +11,28 @@ import {
 import axios from 'axios';
 import { API_URL } from 'src/services/api';
 
-const ForgotPassword = () => {
-  const [email, setEmail] = useState('');
+const ResetPassword = ({ route, navigation }: any) => {
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
+  const token = route?.params?.token || '';
 
-  const handleForgotPassword = async () => {
-    if (!email) {
-      Alert.alert('Error', 'Please enter your email address.');
+  const handleResetPassword = async () => {
+    if (!password || !confirmPassword) {
+      Alert.alert('Error', 'Please fill in all fields.');
+      return;
+    }
+    if (password !== confirmPassword) {
+      Alert.alert('Error', 'Passwords do not match.');
       return;
     }
     setLoading(true);
     try {
-      await axios.post(`${API_URL}auth/forgot-password`, { email });
+      await axios.post(`${API_URL}auth/reset-password`, { token, newPassword: password });
       setSuccess(true);
     } catch (error: any) {
-      Alert.alert('Error', error.response?.data?.error || 'Failed to send reset email');
+      Alert.alert('Error', error.response?.data?.error || 'Failed to reset password');
     } finally {
       setLoading(false);
     }
@@ -34,26 +40,30 @@ const ForgotPassword = () => {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Forgot Password</Text>
+      <Text style={styles.title}>Reset Password</Text>
       {success ? (
-        <Text style={styles.successText}>
-          If an account with that email exists, a reset link has been sent.
-        </Text>
+        <Text style={styles.successText}>Your password has been reset. You can now log in.</Text>
       ) : (
         <>
           <TextInput
             style={styles.input}
-            placeholder="Enter your email"
-            autoCapitalize="none"
-            keyboardType="email-address"
-            value={email}
-            onChangeText={setEmail}
+            placeholder="New password"
+            secureTextEntry
+            value={password}
+            onChangeText={setPassword}
           />
-          <TouchableOpacity style={styles.button} onPress={handleForgotPassword} disabled={loading}>
+          <TextInput
+            style={styles.input}
+            placeholder="Confirm new password"
+            secureTextEntry
+            value={confirmPassword}
+            onChangeText={setConfirmPassword}
+          />
+          <TouchableOpacity style={styles.button} onPress={handleResetPassword} disabled={loading}>
             {loading ? (
               <ActivityIndicator color="#fff" />
             ) : (
-              <Text style={styles.buttonText}>Send Reset Link</Text>
+              <Text style={styles.buttonText}>Reset Password</Text>
             )}
           </TouchableOpacity>
         </>
@@ -90,4 +100,4 @@ const styles = StyleSheet.create({
   successText: { color: 'green', fontSize: 16, textAlign: 'center' },
 });
 
-export default ForgotPassword;
+export default ResetPassword;

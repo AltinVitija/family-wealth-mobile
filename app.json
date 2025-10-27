@@ -15,7 +15,7 @@
     "plugins": [],
 
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./src/assets/logo.png",
 
     "userInterfaceStyle": "light",
 

@@ -10,6 +10,9 @@ import {
   Alert,
   ActivityIndicator,
   RefreshControl,
+  KeyboardAvoidingView,
+  Platform,
+  Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useDispatch, useSelector } from 'react-redux';
@@ -35,6 +38,8 @@ import { getGoals, createGoal, deleteGoal } from 'src/services/financialGoal/goa
 import { getFamilyMembers } from 'src/services/familyMember/familyMember.services';
 import { GoalType, CreateGoalRequest } from 'src/types/goals';
 
+const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+
 const GoalsScreen = () => {
   const dispatch = useDispatch<AppDispatch>();
   const { goals, isLoading, error } = useSelector((state: RootState) => state.financialGoals);
@@ -59,13 +64,11 @@ const GoalsScreen = () => {
     assignedMembers: [],
   });
 
-  // Fetch goals and family members on mount
   useEffect(() => {
     loadGoals();
-    loadFamilyMembers(); //  Load family members
+    loadFamilyMembers();
   }, []);
 
-  // Show error alerts
   useEffect(() => {
     if (error) {
       Alert.alert('Error', error, [{ text: 'OK', onPress: () => dispatch(clearError()) }]);
@@ -101,7 +104,6 @@ const GoalsScreen = () => {
       const data = await getGoals();
       dispatch(fetchGoalsSuccess(data));
 
-      //  Also refresh family members
       dispatch(fetchMembersStart());
       const membersData = await getFamilyMembers();
       dispatch(fetchMembersSuccess(membersData));
@@ -189,7 +191,6 @@ const GoalsScreen = () => {
       const newGoal = await createGoal(goalData);
       dispatch(createGoalSuccess(newGoal));
 
-      // Reset form and close modal
       setFormData({
         title: '',
         type: 'savings',
@@ -245,7 +246,9 @@ const GoalsScreen = () => {
             <Text style={styles.goalIconText}>{getGoalIcon(goal.type)}</Text>
           </View>
           <View style={styles.goalTitleContainer}>
-            <Text style={styles.goalTitle}>{goal.title}</Text>
+            <Text style={styles.goalTitle} numberOfLines={2}>
+              {goal.title}
+            </Text>
             <Text style={styles.goalType}>
               {goal.type.charAt(0).toUpperCase() + goal.type.slice(1)}
             </Text>
@@ -288,7 +291,9 @@ const GoalsScreen = () => {
             <View style={styles.membersList}>
               {goal.assignedMembers.map((member: string, index: number) => (
                 <View key={index} style={styles.memberChip}>
-                  <Text style={styles.memberName}>{member}</Text>
+                  <Text style={styles.memberName} numberOfLines={1}>
+                    {member}
+                  </Text>
                 </View>
               ))}
             </View>
@@ -296,14 +301,18 @@ const GoalsScreen = () => {
         )}
 
         {/* Description */}
-        {goal.description && <Text style={styles.goalDescription}>{goal.description}</Text>}
+        {goal.description && (
+          <Text style={styles.goalDescription} numberOfLines={3}>
+            {goal.description}
+          </Text>
+        )}
       </TouchableOpacity>
     );
   };
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      {/* Header */}
+      {/* Fixed Header */}
       <View style={styles.header}>
         <View>
           <Text style={styles.headerTitle}>Financial Goals</Text>
@@ -317,14 +326,17 @@ const GoalsScreen = () => {
         </TouchableOpacity>
       </View>
 
-      {/* Goals List */}
+      {/* Scrollable Goals List */}
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
+        bounces={true}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
         {isLoading && goals.length === 0 ? (
-          <ActivityIndicator size="large" color="#d4b038" style={styles.loader} />
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#d4b038" />
+          </View>
         ) : goals.length === 0 ? (
           <View style={styles.emptyState}>
             <Text style={styles.emptyStateIcon}>🎯</Text>
@@ -334,186 +346,219 @@ const GoalsScreen = () => {
             </Text>
           </View>
         ) : (
-          goals.map(renderGoalCard)
+          <>
+            {goals.map(renderGoalCard)}
+            {/* Bottom padding to ensure last card is fully visible */}
+            <View style={styles.bottomSpacer} />
+          </>
         )}
       </ScrollView>
 
-      {/* Add Goal Modal */}
+      {/* Add Goal Modal - FIXED WITH SCROLLVIEW */}
       <Modal
         visible={isModalVisible}
         animationType="slide"
-        presentationStyle="pageSheet"
+        transparent={true}
         onRequestClose={() => setIsModalVisible(false)}>
-        <SafeAreaView style={styles.modalContainer}>
-          <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Add Financial Goal</Text>
-            <TouchableOpacity onPress={() => setIsModalVisible(false)}>
-              <Text style={styles.closeButton}>✕</Text>
-            </TouchableOpacity>
-          </View>
+        <View style={styles.modalOverlay}>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={styles.keyboardView}
+            keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}>
+            <View style={styles.modalContainer}>
+              {/* Fixed Header */}
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Add Financial Goal</Text>
+                <TouchableOpacity
+                  onPress={() => setIsModalVisible(false)}
+                  style={styles.closeButton}>
+                  <Text style={styles.closeButtonText}>✕</Text>
+                </TouchableOpacity>
+              </View>
 
-          <ScrollView style={styles.modalContent} showsVerticalScrollIndicator={false}>
-            {/* Goal Title */}
-            <View style={styles.formGroup}>
-              <Text style={styles.formLabel}>
-                Goal Title <Text style={styles.required}>*</Text>
-              </Text>
-              <TextInput
-                style={styles.input}
-                placeholder="e.g., Emergency Fund"
-                value={formData.title}
-                onChangeText={(text) => setFormData({ ...formData, title: text })}
-              />
-            </View>
+              {/* Scrollable Content */}
+              <ScrollView
+                style={styles.modalScrollView}
+                contentContainerStyle={styles.modalScrollContent}
+                showsVerticalScrollIndicator={true}
+                bounces={true}
+                keyboardShouldPersistTaps="handled">
+                {/* Goal Title */}
+                <View style={styles.formGroup}>
+                  <Text style={styles.formLabel}>
+                    Goal Title <Text style={styles.required}>*</Text>
+                  </Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="e.g., Emergency Fund"
+                    placeholderTextColor="#999"
+                    value={formData.title}
+                    onChangeText={(text) => setFormData({ ...formData, title: text })}
+                  />
+                </View>
 
-            {/* Goal Type */}
-            <View style={styles.formGroup}>
-              <Text style={styles.formLabel}>
-                Goal Type <Text style={styles.required}>*</Text>
-              </Text>
-              <View style={styles.typeSelector}>
-                {(['savings', 'investment', 'retirement', 'education', 'other'] as const).map(
-                  (type) => (
-                    <TouchableOpacity
-                      key={type}
-                      style={[styles.typeButton, formData.type === type && styles.typeButtonActive]}
-                      onPress={() => setFormData({ ...formData, type })}>
-                      <Text
-                        style={[
-                          styles.typeButtonText,
-                          formData.type === type && styles.typeButtonTextActive,
-                        ]}>
-                        {type.charAt(0).toUpperCase() + type.slice(1)}
+                {/* Goal Type */}
+                <View style={styles.formGroup}>
+                  <Text style={styles.formLabel}>
+                    Goal Type <Text style={styles.required}>*</Text>
+                  </Text>
+                  <View style={styles.typeSelector}>
+                    {(['savings', 'investment', 'retirement', 'education', 'other'] as const).map(
+                      (type) => (
+                        <TouchableOpacity
+                          key={type}
+                          style={[
+                            styles.typeButton,
+                            formData.type === type && styles.typeButtonActive,
+                          ]}
+                          onPress={() => setFormData({ ...formData, type })}>
+                          <Text
+                            style={[
+                              styles.typeButtonText,
+                              formData.type === type && styles.typeButtonTextActive,
+                            ]}>
+                            {type.charAt(0).toUpperCase() + type.slice(1)}
+                          </Text>
+                        </TouchableOpacity>
+                      )
+                    )}
+                  </View>
+                </View>
+
+                {/* Target Amount */}
+                <View style={styles.formGroup}>
+                  <Text style={styles.formLabel}>
+                    Target Amount <Text style={styles.required}>*</Text>
+                  </Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="0"
+                    placeholderTextColor="#999"
+                    keyboardType="numeric"
+                    value={formData.targetAmount}
+                    onChangeText={(text) => setFormData({ ...formData, targetAmount: text })}
+                  />
+                </View>
+
+                {/* Current Amount */}
+                <View style={styles.formGroup}>
+                  <Text style={styles.formLabel}>Current Amount</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="0"
+                    placeholderTextColor="#999"
+                    keyboardType="numeric"
+                    value={formData.currentAmount}
+                    onChangeText={(text) => setFormData({ ...formData, currentAmount: text })}
+                  />
+                </View>
+
+                {/* Target Date */}
+                <View style={styles.formGroup}>
+                  <Text style={styles.formLabel}>
+                    Target Date (YYYY-MM-DD) <Text style={styles.required}>*</Text>
+                  </Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="2025-12-31"
+                    placeholderTextColor="#999"
+                    value={formData.targetDate}
+                    onChangeText={(text) => setFormData({ ...formData, targetDate: text })}
+                  />
+                </View>
+
+                {/* Description */}
+                <View style={styles.formGroup}>
+                  <Text style={styles.formLabel}>Description</Text>
+                  <TextInput
+                    style={[styles.input, styles.textArea]}
+                    placeholder="Add details about this goal..."
+                    placeholderTextColor="#999"
+                    multiline
+                    numberOfLines={4}
+                    textAlignVertical="top"
+                    value={formData.description}
+                    onChangeText={(text) => setFormData({ ...formData, description: text })}
+                  />
+                </View>
+
+                {/* Assign Family Members */}
+                <View style={styles.formGroup}>
+                  <Text style={styles.formLabel}>Assign Family Members</Text>
+                  {familyMembers.length === 0 ? (
+                    <View style={styles.noMembersContainer}>
+                      <Text style={styles.noMembersText}>
+                        No family members added yet. Add family members first to assign them to
+                        goals.
                       </Text>
-                    </TouchableOpacity>
-                  )
-                )}
+                    </View>
+                  ) : (
+                    <View style={styles.familyMemberSelector}>
+                      {familyMembers.map((member) => {
+                        const fullName = `${member.firstName} ${member.lastName}`;
+                        const isSelected = formData.assignedMembers.includes(fullName);
+                        return (
+                          <TouchableOpacity
+                            key={member._id}
+                            style={[
+                              styles.familyMemberChip,
+                              isSelected && styles.familyMemberChipSelected,
+                            ]}
+                            onPress={() => {
+                              if (isSelected) {
+                                setFormData({
+                                  ...formData,
+                                  assignedMembers: formData.assignedMembers.filter(
+                                    (m) => m !== fullName
+                                  ),
+                                });
+                              } else {
+                                setFormData({
+                                  ...formData,
+                                  assignedMembers: [...formData.assignedMembers, fullName],
+                                });
+                              }
+                            }}>
+                            <Text
+                              style={[
+                                styles.familyMemberChipText,
+                                isSelected && styles.familyMemberChipTextSelected,
+                              ]}>
+                              {fullName}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  )}
+                </View>
+
+                {/* Bottom spacing */}
+                <View style={{ height: 30 }} />
+              </ScrollView>
+
+              {/* Fixed Bottom Actions */}
+              <View style={styles.modalActions}>
+                <TouchableOpacity
+                  style={styles.cancelButton}
+                  onPress={() => setIsModalVisible(false)}
+                  disabled={isLoading}>
+                  <Text style={styles.cancelButtonText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.submitButton, isLoading && styles.submitButtonDisabled]}
+                  onPress={handleAddGoal}
+                  disabled={isLoading}>
+                  {isLoading ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <Text style={styles.submitButtonText}>Add Goal</Text>
+                  )}
+                </TouchableOpacity>
               </View>
             </View>
-
-            {/* Target Amount */}
-            <View style={styles.formGroup}>
-              <Text style={styles.formLabel}>
-                Target Amount <Text style={styles.required}>*</Text>
-              </Text>
-              <TextInput
-                style={styles.input}
-                placeholder="0"
-                keyboardType="numeric"
-                value={formData.targetAmount}
-                onChangeText={(text) => setFormData({ ...formData, targetAmount: text })}
-              />
-            </View>
-
-            {/* Current Amount */}
-            <View style={styles.formGroup}>
-              <Text style={styles.formLabel}>Current Amount</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="0"
-                keyboardType="numeric"
-                value={formData.currentAmount}
-                onChangeText={(text) => setFormData({ ...formData, currentAmount: text })}
-              />
-            </View>
-
-            {/* Target Date */}
-            <View style={styles.formGroup}>
-              <Text style={styles.formLabel}>
-                Target Date (YYYY-MM-DD) <Text style={styles.required}>*</Text>
-              </Text>
-              <TextInput
-                style={styles.input}
-                placeholder="2025-12-31"
-                value={formData.targetDate}
-                onChangeText={(text) => setFormData({ ...formData, targetDate: text })}
-              />
-            </View>
-
-            {/* Description */}
-            <View style={styles.formGroup}>
-              <Text style={styles.formLabel}>Description</Text>
-              <TextInput
-                style={[styles.input, styles.textArea]}
-                placeholder="Add details about this goal..."
-                multiline
-                numberOfLines={4}
-                value={formData.description}
-                onChangeText={(text) => setFormData({ ...formData, description: text })}
-              />
-            </View>
-
-            {/* Assign Family Members */}
-            <View style={styles.formGroup}>
-              <Text style={styles.formLabel}>Assign Family Members</Text>
-              {familyMembers.length === 0 ? (
-                <View style={styles.noMembersContainer}>
-                  <Text style={styles.noMembersText}>
-                    No family members added yet. Add family members first to assign them to goals.
-                  </Text>
-                </View>
-              ) : (
-                <View style={styles.familyMemberSelector}>
-                  {familyMembers.map((member) => {
-                    const fullName = `${member.firstName} ${member.lastName}`;
-                    const isSelected = formData.assignedMembers.includes(fullName);
-                    return (
-                      <TouchableOpacity
-                        key={member._id}
-                        style={[
-                          styles.familyMemberChip,
-                          isSelected && styles.familyMemberChipSelected,
-                        ]}
-                        onPress={() => {
-                          if (isSelected) {
-                            setFormData({
-                              ...formData,
-                              assignedMembers: formData.assignedMembers.filter(
-                                (m) => m !== fullName
-                              ),
-                            });
-                          } else {
-                            setFormData({
-                              ...formData,
-                              assignedMembers: [...formData.assignedMembers, fullName],
-                            });
-                          }
-                        }}>
-                        <Text
-                          style={[
-                            styles.familyMemberChipText,
-                            isSelected && styles.familyMemberChipTextSelected,
-                          ]}>
-                          {fullName}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-              )}
-            </View>
-          </ScrollView>
-
-          {/* Modal Actions */}
-          <View style={styles.modalActions}>
-            <TouchableOpacity
-              style={styles.cancelButton}
-              onPress={() => setIsModalVisible(false)}
-              disabled={isLoading}>
-              <Text style={styles.cancelButtonText}>Cancel</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.submitButton, isLoading && styles.submitButtonDisabled]}
-              onPress={handleAddGoal}
-              disabled={isLoading}>
-              {isLoading ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text style={styles.submitButtonText}>Add Goal</Text>
-              )}
-            </TouchableOpacity>
-          </View>
-        </SafeAreaView>
+          </KeyboardAvoidingView>
+        </View>
       </Modal>
     </SafeAreaView>
   );
@@ -551,6 +596,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#d4b038',
     justifyContent: 'center',
     alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 4,
   },
   addButtonText: {
     fontSize: 28,
@@ -562,17 +612,24 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: 16,
+    paddingBottom: 20,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 60,
   },
   goalCard: {
     backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
+    borderRadius: 16,
+    padding: 18,
     marginBottom: 16,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowRadius: 8,
+    elevation: 4,
   },
   goalHeader: {
     flexDirection: 'row',
@@ -636,6 +693,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'baseline',
     marginBottom: 16,
+    flexWrap: 'wrap',
   },
   currentAmount: {
     fontSize: 24,
@@ -649,12 +707,14 @@ const styles = StyleSheet.create({
   },
   detailsSection: {
     flexDirection: 'row',
-    marginBottom: 16,
+    flexWrap: 'wrap',
+    marginBottom: 12,
   },
   detailItem: {
     flexDirection: 'row',
     alignItems: 'center',
     marginRight: 24,
+    marginBottom: 8,
   },
   detailIcon: {
     fontSize: 16,
@@ -683,6 +743,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     marginRight: 8,
     marginBottom: 8,
+    maxWidth: 150,
   },
   memberName: {
     fontSize: 14,
@@ -692,14 +753,15 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#666',
     fontStyle: 'italic',
+    lineHeight: 20,
   },
-  loader: {
-    marginTop: 40,
+  bottomSpacer: {
+    height: 20,
   },
   emptyState: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 60,
+    paddingVertical: 80,
   },
   emptyStateIcon: {
     fontSize: 64,
@@ -716,31 +778,70 @@ const styles = StyleSheet.create({
     color: '#999',
     textAlign: 'center',
     paddingHorizontal: 40,
+    lineHeight: 20,
+  },
+  // MODAL STYLES - UPDATED FOR FULL VISIBILITY
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'flex-end',
+  },
+  keyboardView: {
+    flex: 1,
+    justifyContent: 'flex-end',
   },
   modalContainer: {
-    flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: SCREEN_HEIGHT * 0.92,
+    height: SCREEN_HEIGHT * 0.92,
   },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: 20,
+    paddingBottom: 16,
     borderBottomWidth: 1,
     borderBottomColor: '#e5e5e5',
+    backgroundColor: '#FFFFFF',
   },
   modalTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
+    fontSize: 22,
+    fontWeight: '700',
     color: '#000',
+    flex: 1,
   },
   closeButton: {
-    fontSize: 24,
-    color: '#666',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#f5f5f5',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  modalContent: {
+  closeButtonText: {
+    fontSize: 22,
+    color: '#666',
+    fontWeight: '600',
+    lineHeight: 24,
+  },
+  modalScrollView: {
     flex: 1,
+  },
+  modalScrollContent: {
     padding: 20,
+    paddingBottom: 40,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    padding: 20,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#e5e5e5',
+    gap: 12,
+    backgroundColor: '#FFFFFF',
   },
   formGroup: {
     marginBottom: 24,
@@ -749,18 +850,19 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#000',
-    marginBottom: 8,
+    marginBottom: 10,
   },
   required: {
     color: '#ff4444',
   },
   input: {
     borderWidth: 1,
-    borderColor: '#e5e5e5',
-    borderRadius: 8,
-    padding: 12,
+    borderColor: '#d0d0d0',
+    borderRadius: 10,
+    padding: 14,
     fontSize: 16,
-    backgroundColor: '#f9f9f9',
+    backgroundColor: '#fafafa',
+    color: '#000',
   },
   textArea: {
     height: 100,
@@ -769,21 +871,24 @@ const styles = StyleSheet.create({
   typeSelector: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+    gap: 10,
   },
   typeButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+    paddingHorizontal: 18,
+    paddingVertical: 12,
     borderRadius: 20,
     backgroundColor: '#f0f0f0',
-    marginRight: 8,
-    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
   },
   typeButtonActive: {
     backgroundColor: '#d4b038',
+    borderColor: '#d4b038',
   },
   typeButtonText: {
-    fontSize: 14,
+    fontSize: 15,
     color: '#666',
+    fontWeight: '500',
   },
   typeButtonTextActive: {
     color: '#fff',
@@ -792,24 +897,24 @@ const styles = StyleSheet.create({
   familyMemberSelector: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+    gap: 10,
   },
   familyMemberChip: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+    paddingHorizontal: 18,
+    paddingVertical: 12,
     borderRadius: 20,
     backgroundColor: '#f0f0f0',
-    marginRight: 8,
-    marginBottom: 8,
     borderWidth: 1,
-    borderColor: '#e5e5e5',
+    borderColor: '#e0e0e0',
   },
   familyMemberChipSelected: {
     backgroundColor: '#d4b038',
     borderColor: '#d4b038',
   },
   familyMemberChipText: {
-    fontSize: 14,
+    fontSize: 15,
     color: '#666',
+    fontWeight: '500',
   },
   familyMemberChipTextSelected: {
     color: '#fff',
@@ -817,8 +922,8 @@ const styles = StyleSheet.create({
   },
   noMembersContainer: {
     backgroundColor: '#fff3cd',
-    padding: 16,
-    borderRadius: 8,
+    padding: 18,
+    borderRadius: 10,
     borderWidth: 1,
     borderColor: '#ffc107',
   },
@@ -828,17 +933,10 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 20,
   },
-  modalActions: {
-    flexDirection: 'row',
-    padding: 20,
-    borderTopWidth: 1,
-    borderTopColor: '#e5e5e5',
-    gap: 12,
-  },
   cancelButton: {
     flex: 1,
     padding: 16,
-    borderRadius: 8,
+    borderRadius: 10,
     backgroundColor: '#f0f0f0',
     alignItems: 'center',
   },
@@ -850,7 +948,7 @@ const styles = StyleSheet.create({
   submitButton: {
     flex: 1,
     padding: 16,
-    borderRadius: 8,
+    borderRadius: 10,
     backgroundColor: '#d4b038',
     alignItems: 'center',
   },

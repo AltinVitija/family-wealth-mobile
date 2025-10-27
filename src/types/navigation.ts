@@ -13,6 +13,8 @@ export type RootStackParamList = {
 export type AuthStackParamList = {
   [ROUTES.LOGIN]: undefined;
   [ROUTES.REGISTER]: undefined;
+  ForgotPassword: undefined;
+  ResetPassword: { token?: string } | undefined;
 };
 
 // Main Tabs
@@ -21,6 +23,7 @@ export type MainTabParamList = {
   [ROUTES.ESTATE]: undefined;
   [ROUTES.FAMILY]: undefined;
   [ROUTES.GOALS]: undefined;
+  Settings: undefined;
 };
 
 // Estate Stack

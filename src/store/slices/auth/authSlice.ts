@@ -13,6 +13,7 @@ interface InitialStateType {
     email: string;
     firstName: string;
     lastName: string;
+    role?: 'owner' | 'member' | 'viewer';
   } | null;
 }
 
@@ -25,6 +26,7 @@ interface LoginSuccessParams {
     email: string;
     firstName: string;
     lastName: string;
+    role?: 'owner' | 'member' | 'viewer';
   };
 }
 
