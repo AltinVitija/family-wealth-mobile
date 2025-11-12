@@ -1,4 +1,4 @@
-// screens/dashboard/DashboardScreen.tsx
+// Improved Dashboard Screen matching design screenshots
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
@@ -10,6 +10,8 @@ import {
   ActivityIndicator,
   RefreshControl,
   StatusBar,
+  Image,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useDispatch, useSelector } from 'react-redux';
@@ -22,37 +24,78 @@ import {
   clearError,
 } from 'src/store/slices/dashboard/dashboardSlice';
 import { getDashboardData } from 'src/services/dashboard/dashboard.services';
-import { logout } from 'src/store/slices/auth/authSlice';
-import { removeData } from 'src/services/storage/asyncStorage';
+import { getEstatePlans } from 'src/services/estate/estate.services';
+import {
+  fetchPlansStart,
+  fetchPlansSuccess,
+  fetchPlansFailure,
+} from 'src/store/slices/estate/estateSlice';
 
 const DashboardScreen = () => {
   const dispatch = useDispatch<AppDispatch>();
   const navigation = useNavigation<any>();
 
-  // Redux state
   const { user } = useSelector((state: RootState) => state.auth);
   const {
     data: dashboardData,
     isLoading,
     error,
   } = useSelector((state: RootState) => state.dashboardReducer);
-  const { goals } = useSelector((state: RootState) => state.financialGoals);
-  const { members } = useSelector((state: RootState) => state.familyMembers);
-  const { plans } = useSelector((state: RootState) => state.estatePlans);
+
+  // Get estate plans from Redux store
+  const { plans: estatePlans, isLoading: estatePlansLoading } = useSelector(
+    (state: RootState) => state.estatePlans
+  );
+
+  // Get the active estate plan
+  const activeEstatePlan = estatePlans.find((plan: any) => plan.status === 'active');
+
+  // Debug logging
+  useEffect(() => {
+    console.log('=== ESTATE PLANS DEBUG ===');
+    console.log('Total estate plans:', estatePlans.length);
+    console.log('All plans:', JSON.stringify(estatePlans, null, 2));
+
+    if (activeEstatePlan) {
+      console.log('Active Estate Plan Found:', activeEstatePlan);
+      console.log('Active Plan Title:', activeEstatePlan.title);
+      console.log('Active Plan Status:', activeEstatePlan.status);
+      console.log('Assets:', activeEstatePlan.assets);
+      console.log('Assets Count:', activeEstatePlan.assets?.length);
+      console.log('Assets Array?:', Array.isArray(activeEstatePlan.assets));
+      console.log('Beneficiaries:', activeEstatePlan.beneficiaries);
+      console.log('Beneficiaries Count:', activeEstatePlan.beneficiaries?.length);
+
+      if (activeEstatePlan.assets && activeEstatePlan.assets.length > 0) {
+        console.log('First asset:', activeEstatePlan.assets[0]);
+        console.log('First asset value:', activeEstatePlan.assets[0].value);
+      }
+    } else {
+      console.log('No active estate plan found');
+    }
+    console.log('=== END DEBUG ===');
+  }, [activeEstatePlan, estatePlans]);
 
   const [refreshing, setRefreshing] = useState(false);
 
-  // Fetch dashboard data on mount
   useEffect(() => {
     loadDashboardData();
+    loadEstatePlans();
   }, []);
 
-  // Show error alerts
-  useEffect(() => {
-    if (error) {
-      Alert.alert('Error', error, [{ text: 'OK', onPress: () => dispatch(clearError()) }]);
+  const loadEstatePlans = async () => {
+    try {
+      dispatch(fetchPlansStart());
+      const plans = await getEstatePlans();
+      console.log('Loaded estate plans:', plans);
+      console.log('Plans data:', JSON.stringify(plans, null, 2));
+      dispatch(fetchPlansSuccess(plans));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to fetch estate plans';
+      console.error('Error loading estate plans:', err);
+      dispatch(fetchPlansFailure(message));
     }
-  }, [error]);
+  };
 
   const loadDashboardData = async () => {
     try {
@@ -67,36 +110,10 @@ const DashboardScreen = () => {
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    try {
-      dispatch(fetchDashboardStart());
-      const data = await getDashboardData();
-      dispatch(fetchDashboardSuccess(data));
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to fetch dashboard data';
-      dispatch(fetchDashboardFailure(message));
-    } finally {
-      setRefreshing(false);
-    }
-  }, [dispatch]);
-
-  const handleLogout = () => {
-    Alert.alert('Logout', 'Are you sure you want to logout?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Logout',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            await removeData('token');
-            await removeData('refreshToken');
-            dispatch(logout());
-          } catch (error) {
-            console.error('Logout error:', error);
-          }
-        },
-      },
-    ]);
-  };
+    await loadDashboardData();
+    await loadEstatePlans();
+    setRefreshing(false);
+  }, []);
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-US', {
@@ -106,302 +123,236 @@ const DashboardScreen = () => {
     }).format(amount);
   };
 
+  const formatPercentage = (value: number) => {
+    return value >= 0 ? `+${value.toFixed(1)}%` : `${value.toFixed(1)}%`;
+  };
+
+  // Calculate total assets value
+  const calculateTotalValue = (assets: any[]) => {
+    if (!assets || !Array.isArray(assets)) return 0;
+    const total = assets.reduce((sum, asset) => {
+      const value = Number(asset.value) || 0;
+      return sum + value;
+    }, 0);
+    console.log('Calculated total value:', total, 'from assets:', assets);
+    return total;
+  };
+
+  // Format date
   const formatDate = (dateString: string) => {
-    if (!dateString) return '';
+    if (!dateString) return 'N/A';
     const date = new Date(dateString);
     return date.toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' });
   };
 
-  const calculateTotalAssets = (assets?: any[]) => {
-    if (!assets || !Array.isArray(assets)) return 0;
-    return assets.reduce((sum, asset) => sum + (asset.value || 0), 0);
-  };
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'active':
-        return '#10B981';
-      case 'draft':
-        return '#F59E0B';
-      case 'archived':
-        return '#6B7280';
-      default:
-        return '#64748B';
-    }
-  };
-
-  const getStatusLabel = (status: string) => {
-    switch (status) {
-      case 'active':
-        return 'Active';
-      case 'draft':
-        return 'Draft';
-      case 'archived':
-        return 'Archived';
-      default:
-        return status;
-    }
-  };
-
-  const renderStatCard = (title: string, value: string | number, icon: string, color: string) => {
-    return (
-      <View style={[styles.statCard, { borderLeftColor: color }]}>
-        <Text style={styles.statIcon}>{icon}</Text>
-        <View style={styles.statContent}>
-          <Text style={styles.statValue}>{value}</Text>
-          <Text style={styles.statTitle}>{title}</Text>
-        </View>
+  // Metric card component matching the design
+  const MetricCard = ({
+    iconSource,
+    value,
+    label,
+    backgroundColor,
+    onPress,
+  }: {
+    iconSource: any;
+    value: number;
+    label: string;
+    backgroundColor: string;
+    onPress?: () => void;
+  }) => (
+    <TouchableOpacity
+      style={[styles.metricCard, { backgroundColor }]}
+      onPress={onPress}
+      activeOpacity={0.7}>
+      <View style={styles.metricIconContainer}>
+        <Image source={iconSource} style={styles.metricIconImage} />
       </View>
-    );
-  };
+      <Text style={styles.metricValue}>{value}</Text>
+      <Text style={styles.metricLabel}>{label}</Text>
+    </TouchableOpacity>
+  );
 
-  const renderQuickAction = (title: string, icon: string, color: string, onPress: () => void) => {
-    return (
-      <TouchableOpacity
-        style={[styles.quickAction, { backgroundColor: color }]}
-        onPress={onPress}
-        activeOpacity={0.7}>
-        <Text style={styles.quickActionIcon}>{icon}</Text>
-        <Text style={styles.quickActionTitle}>{title}</Text>
-      </TouchableOpacity>
-    );
-  };
-
-  // Get active estate plans
-  const activePlans = plans.filter((plan: any) => plan.status === 'active');
+  // Helper: check if user has any real dashboard data
+  const hasRealData =
+    dashboardData &&
+    ((dashboardData.overview?.totalEstatePlans && dashboardData.overview.totalEstatePlans > 0) ||
+      (dashboardData.overview?.totalFamilyMembers &&
+        dashboardData.overview.totalFamilyMembers > 0) ||
+      (dashboardData.overview?.pendingTasks && dashboardData.overview.pendingTasks > 0) ||
+      (dashboardData.overview?.activeGoals && dashboardData.overview.activeGoals > 0));
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      <StatusBar barStyle="dark-content" backgroundColor="#fff" />
+    <View style={styles.wrapper}>
+      <StatusBar barStyle="light-content" backgroundColor="#1E3A5F" translucent={false} />
 
-      {/* Header */}
-      <View style={styles.header}>
-        <View>
-          <Text style={styles.greeting}>Welcome back,</Text>
-          <Text style={styles.userName}>{user?.firstName || 'User'}!</Text>
+      <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
+        {/* Header - Dark Blue Background */}
+        <View style={styles.header}>
+          <View>
+            <Text style={styles.greeting}>Welcome back</Text>
+            <Text style={styles.userName}>
+              {user?.firstName} {user?.lastName}
+            </Text>
+          </View>
         </View>
-        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-          <Text style={styles.logoutIcon}>🚪</Text>
-        </TouchableOpacity>
-      </View>
 
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
-        {isLoading && !dashboardData ? (
-          <ActivityIndicator size="large" color="#d4b038" style={styles.loader} />
-        ) : (
-          <>
-            {/* Stats Grid */}
-            <View style={styles.statsGrid}>
-              {renderStatCard('Active Goals', goals.length || 0, '🎯', '#d4b038')}
-              {renderStatCard('Family Members', members.length || 0, '👨‍👩‍👧‍👦', '#FF69B4')}
-            </View>
-
-            {/* Financial Summary */}
-            {dashboardData?.financialSummary && (
-              <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Financial Overview</Text>
-                <View style={styles.financialCard}>
-                  <View style={styles.financialRow}>
-                    <Text style={styles.financialLabel}>Total Target</Text>
-                    <Text style={styles.financialValue}>
-                      {formatCurrency(dashboardData.financialSummary.totalTargetSavings)}
-                    </Text>
-                  </View>
-                  <View style={styles.financialRow}>
-                    <Text style={styles.financialLabel}>Current Savings</Text>
-                    <Text style={[styles.financialValue, { color: '#22c55e' }]}>
-                      {formatCurrency(dashboardData.financialSummary.totalCurrentSavings)}
-                    </Text>
-                  </View>
-                  <View style={styles.progressBarContainer}>
-                    <View
-                      style={[
-                        styles.progressBar,
-                        { width: `${dashboardData.financialSummary.savingsProgress}%` },
-                      ]}
-                    />
-                  </View>
-                  <Text style={styles.progressText}>
-                    {dashboardData.financialSummary.savingsProgress.toFixed(1)}% Complete
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#d4af37" />
+          }>
+          {isLoading && !dashboardData ? (
+            <ActivityIndicator size="large" color="#d4af37" style={styles.loader} />
+          ) : hasRealData ? (
+            <>
+              {/* Total Wealth Card - Yellow/Gold */}
+              <View style={styles.wealthCard}>
+                <Text style={styles.wealthAmount}>
+                  {formatCurrency(dashboardData?.financialSummary?.totalAssets || 0)}
+                </Text>
+                <View style={styles.wealthGrowth}>
+                  <Text style={styles.growthIcon}>📈</Text>
+                  <Text style={styles.growthText}>
+                    {formatPercentage((dashboardData as any)?.yearGrowth || 0)} this year
                   </Text>
                 </View>
               </View>
-            )}
 
-            {/* Quick Actions */}
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Quick Actions</Text>
-              <View style={styles.quickActionsGrid}>
-                {renderQuickAction('Add Goal', '🎯', '#d4b038', () => navigation.navigate('Goals'))}
-                {renderQuickAction('Add Member', '👨‍👩‍👧', '#FF69B4', () =>
-                  navigation.navigate('Family')
-                )}
-                {renderQuickAction('Estate Plan', '🏠', '#90EE90', () =>
-                  navigation.navigate('Estate')
-                )}
-                {renderQuickAction('View All', '📊', '#87CEEB', () => navigation.navigate('Goals'))}
+              {/* Metrics Grid - 2x2 */}
+              <View style={styles.metricsGrid}>
+                <MetricCard
+                  iconSource={require('src/assets/icons/task.png')}
+                  value={dashboardData?.overview?.totalEstatePlans || 0}
+                  label="Estate Plans"
+                  backgroundColor="#E3F2FD"
+                  onPress={() => navigation.navigate('Estate')}
+                />
+                <MetricCard
+                  iconSource={require('src/assets/icons/contacts.png')}
+                  value={dashboardData?.overview?.totalFamilyMembers || 0}
+                  label="Family Members"
+                  backgroundColor="#FFF9E6"
+                  onPress={() => navigation.navigate('Family')}
+                />
+                <MetricCard
+                  iconSource={require('src/assets/icons/financial-goals.png')}
+                  value={dashboardData?.overview?.activeGoals || 0}
+                  label="Active Goals"
+                  backgroundColor="#E8F5E9"
+                  onPress={() => navigation.navigate('Goals')}
+                />
               </View>
-            </View>
 
-            {/* Active Estate Plans */}
-            {activePlans.length > 0 && (
-              <View style={styles.section}>
-                <View style={styles.sectionHeader}>
-                  <Text style={styles.sectionTitle}>Active Estate Plans</Text>
-                  <TouchableOpacity onPress={() => navigation.navigate('Estate')}>
-                    <Text style={styles.seeAllText}>See All</Text>
-                  </TouchableOpacity>
-                </View>
-                {activePlans.slice(0, 2).map((plan: any) => (
+              {/* Active Estate Plan */}
+              {!estatePlansLoading && activeEstatePlan && (
+                <View style={styles.estatePlanSection}>
+                  <View style={styles.sectionHeader}>
+                    <Text style={styles.sectionTitle}>Active Estate Plan</Text>
+                    <TouchableOpacity onPress={() => navigation.navigate('Estate')}>
+                      <Text style={styles.seeAllText}>See All</Text>
+                    </TouchableOpacity>
+                  </View>
                   <TouchableOpacity
-                    key={plan._id}
                     style={styles.estatePlanCard}
                     onPress={() => navigation.navigate('Estate')}
-                    activeOpacity={0.7}>
+                    activeOpacity={0.9}>
                     <View style={styles.estatePlanHeader}>
-                      <View style={styles.estatePlanTitleRow}>
-                        <Text style={styles.estatePlanTitle} numberOfLines={1}>
-                          {plan.title || 'Untitled Plan'}
+                      <View style={styles.estatePlanTitleContainer}>
+                        <Text style={styles.estatePlanTitle}>
+                          {activeEstatePlan.title || 'Primary Estate Plan'}
                         </Text>
-                        <View
-                          style={[
-                            styles.estatePlanBadge,
-                            { backgroundColor: getStatusColor(plan.status) },
-                          ]}>
-                          <Text style={styles.estatePlanBadgeText}>
-                            {getStatusLabel(plan.status)}
-                          </Text>
-                        </View>
+                        <Text style={styles.estatePlanDate}>
+                          Last updated:{' '}
+                          {formatDate(activeEstatePlan.updatedAt || activeEstatePlan.createdAt)}
+                        </Text>
                       </View>
-                      {plan.updatedAt && (
-                        <Text style={styles.estatePlanSubtitle}>
-                          Last updated: {formatDate(plan.updatedAt)}
-                        </Text>
-                      )}
+                      <View style={styles.estatePlanBadge}>
+                        <Text style={styles.estatePlanBadgeText}>Active</Text>
+                      </View>
                     </View>
 
                     <View style={styles.estatePlanStats}>
                       <View style={styles.estatePlanStat}>
                         <Text style={styles.estatePlanStatValue}>
-                          {Array.isArray(plan.assets) ? plan.assets.length : 0}
+                          {Array.isArray(activeEstatePlan.assets)
+                            ? activeEstatePlan.assets.length
+                            : 0}
                         </Text>
                         <Text style={styles.estatePlanStatLabel}>Assets</Text>
                       </View>
+
                       <View style={styles.estatePlanStat}>
                         <Text style={styles.estatePlanStatValue}>
-                          {Array.isArray(plan.beneficiaries) ? plan.beneficiaries.length : 0}
+                          {Array.isArray(activeEstatePlan.beneficiaries)
+                            ? activeEstatePlan.beneficiaries.length
+                            : 0}
                         </Text>
                         <Text style={styles.estatePlanStatLabel}>Beneficiaries</Text>
                       </View>
+
                       <View style={styles.estatePlanStat}>
                         <Text style={styles.estatePlanStatValue}>
-                          {formatCurrency(calculateTotalAssets(plan.assets))}
+                          {formatCurrency(calculateTotalValue(activeEstatePlan.assets || []))}
                         </Text>
                         <Text style={styles.estatePlanStatLabel}>Total Value</Text>
                       </View>
                     </View>
                   </TouchableOpacity>
-                ))}
-              </View>
-            )}
-
-            {/* Recent Goals */}
-            {goals.length > 0 && (
-              <View style={styles.section}>
-                <View style={styles.sectionHeader}>
-                  <Text style={styles.sectionTitle}>Recent Goals</Text>
-                  <TouchableOpacity onPress={() => navigation.navigate('Goals')}>
-                    <Text style={styles.seeAllText}>See All</Text>
-                  </TouchableOpacity>
                 </View>
-                {goals.slice(0, 3).map((goal: any) => {
-                  const progress = Math.round((goal.currentAmount / goal.targetAmount) * 100);
-                  return (
-                    <TouchableOpacity
-                      key={goal._id}
-                      style={styles.recentGoalCard}
-                      onPress={() => navigation.navigate('Goals')}
-                      activeOpacity={0.7}>
-                      <View style={styles.recentGoalHeader}>
-                        <Text style={styles.recentGoalTitle} numberOfLines={1}>
-                          {goal.title}
-                        </Text>
-                        <Text style={styles.recentGoalProgress}>{progress}%</Text>
-                      </View>
-                      <View style={styles.recentGoalProgressBar}>
-                        <View style={[styles.recentGoalProgressFill, { width: `${progress}%` }]} />
-                      </View>
-                      <Text style={styles.recentGoalAmount}>
-                        {formatCurrency(goal.currentAmount)} of {formatCurrency(goal.targetAmount)}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            )}
+              )}
 
-            {/* Empty State */}
-            {goals.length === 0 && members.length === 0 && activePlans.length === 0 && (
-              <View style={styles.emptyState}>
-                <Text style={styles.emptyStateIcon}>🚀</Text>
-                <Text style={styles.emptyStateTitle}>Get Started!</Text>
-                <Text style={styles.emptyStateText}>
-                  Start by adding your first goal, family member, or estate plan
-                </Text>
-              </View>
-            )}
-
-            {/* Bottom Spacer */}
-            <View style={styles.bottomSpacer} />
-          </>
-        )}
-      </ScrollView>
-    </SafeAreaView>
+              {/* Bottom Spacer */}
+              <View style={styles.bottomSpacer} />
+            </>
+          ) : (
+            <View style={styles.emptyState}>
+              <Image source={require('src/assets/icons/home.png')} style={styles.emptyStateImage} />
+              <Text style={styles.emptyStateTitle}>Get Started!</Text>
+              <Text style={styles.emptyStateText}>
+                Add your first estate plan, goals or family members
+              </Text>
+              <TouchableOpacity
+                style={styles.emptyStateButton}
+                onPress={() => navigation.navigate('Estate')}>
+                <Text style={styles.emptyStateButtonText}>Create Estate Plan</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </ScrollView>
+      </SafeAreaView>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
+  wrapper: {
+    flex: 1,
+    backgroundColor: '#1E3A5F',
+  },
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#F5F7FA',
   },
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    backgroundColor: '#1E3A5F',
     paddingHorizontal: 20,
-    paddingVertical: 16,
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e5e5',
+    paddingTop: 16,
+    paddingBottom: 24,
   },
   greeting: {
     fontSize: 14,
-    color: '#666',
+    color: '#B8C5D6',
+    marginBottom: 4,
   },
   userName: {
-    fontSize: 24,
+    fontSize: 28,
     fontWeight: 'bold',
-    color: '#000',
-    marginTop: 4,
-  },
-  logoutButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#f5f5f5',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  logoutIcon: {
-    fontSize: 20,
+    color: '#FFFFFF',
   },
   scrollView: {
     flex: 1,
+    backgroundColor: '#F5F7FA',
   },
   scrollContent: {
     padding: 16,
@@ -410,41 +361,86 @@ const styles = StyleSheet.create({
   loader: {
     marginTop: 40,
   },
-  statsGrid: {
-    flexDirection: 'row',
-    gap: 12,
+
+  // Wealth Card - Yellow/Gold
+  wealthCard: {
+    backgroundColor: '#F4E5B8',
+    borderRadius: 16,
+    padding: 24,
     marginBottom: 20,
-  },
-  statCard: {
-    flex: 1,
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
-    borderLeftWidth: 4,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
   },
-  statIcon: {
-    fontSize: 32,
+  wealthAmount: {
+    fontSize: 42,
+    fontWeight: 'bold',
+    color: '#1E3A5F',
     marginBottom: 12,
   },
-  statContent: {
-    gap: 4,
+  wealthGrowth: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
-  statValue: {
-    fontSize: 28,
+  growthIcon: {
+    fontSize: 16,
+    marginRight: 6,
+  },
+  growthText: {
+    fontSize: 16,
+    color: '#2D4A3E',
+    fontWeight: '600',
+  },
+
+  // Metrics Grid
+  metricsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    marginBottom: 24,
+  },
+  metricCard: {
+    width: '48%',
+    borderRadius: 16,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  metricIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  metricIcon: {
+    fontSize: 24,
+  },
+  metricIconImage: {
+    width: 28,
+    height: 28,
+  },
+  metricValue: {
+    fontSize: 32,
     fontWeight: 'bold',
-    color: '#000',
+    color: '#1E3A5F',
+    marginBottom: 4,
   },
-  statTitle: {
-    fontSize: 12,
-    color: '#666',
-    textTransform: 'uppercase',
+  metricLabel: {
+    fontSize: 14,
+    color: '#64748B',
+    fontWeight: '500',
   },
-  section: {
+
+  // Estate Plan Section
+  estatePlanSection: {
     marginBottom: 24,
   },
   sectionHeader: {
@@ -454,216 +450,117 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   sectionTitle: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: 'bold',
-    color: '#000',
+    color: '#1E3A5F',
   },
   seeAllText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#d4b038',
+    color: '#d4af37',
   },
-  financialCard: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
+  estatePlanCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
     padding: 20,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.08,
     shadowRadius: 4,
-    elevation: 3,
-  },
-  financialRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  financialLabel: {
-    fontSize: 14,
-    color: '#666',
-  },
-  financialValue: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#000',
-  },
-  progressBarContainer: {
-    height: 8,
-    backgroundColor: '#f0f0f0',
-    borderRadius: 4,
-    overflow: 'hidden',
-    marginTop: 8,
-    marginBottom: 8,
-  },
-  progressBar: {
-    height: '100%',
-    backgroundColor: '#d4b038',
-    borderRadius: 4,
-  },
-  progressText: {
-    fontSize: 12,
-    color: '#666',
-    textAlign: 'center',
-  },
-  quickActionsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-  },
-  quickAction: {
-    width: '48%',
-    aspectRatio: 1,
-    borderRadius: 12,
-    padding: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  quickActionIcon: {
-    fontSize: 40,
-    marginBottom: 8,
-  },
-  quickActionTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#fff',
-    textAlign: 'center',
-  },
-  // Estate Plan Card Styles
-  estatePlanCard: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    elevation: 2,
   },
   estatePlanHeader: {
-    marginBottom: 16,
-  },
-  estatePlanTitleRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 4,
+    alignItems: 'flex-start',
+    marginBottom: 20,
   },
-  estatePlanTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#000',
+  estatePlanTitleContainer: {
     flex: 1,
     marginRight: 12,
   },
+  estatePlanTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#1E3A5F',
+    marginBottom: 4,
+  },
+  estatePlanDate: {
+    fontSize: 13,
+    color: '#64748B',
+  },
   estatePlanBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+    backgroundColor: '#D1FAE5',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
     borderRadius: 12,
   },
   estatePlanBadgeText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#fff',
-  },
-  estatePlanSubtitle: {
     fontSize: 12,
-    color: '#666',
+    fontWeight: '600',
+    color: '#059669',
   },
   estatePlanStats: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#f0f0f0',
+    gap: 12,
   },
   estatePlanStat: {
-    alignItems: 'center',
     flex: 1,
+    alignItems: 'center',
   },
   estatePlanStatValue: {
-    fontSize: 16,
+    fontSize: 24,
     fontWeight: 'bold',
-    color: '#000',
-    marginBottom: 4,
+    color: '#1E3A5F',
+    marginBottom: 6,
   },
   estatePlanStatLabel: {
-    fontSize: 11,
-    color: '#666',
+    fontSize: 12,
+    color: '#64748B',
+    fontWeight: '500',
   },
-  // Recent Goals Styles
-  recentGoalCard: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
+
+  // Empty State
+  emptyState: {
+    alignItems: 'center',
+    paddingVertical: 80,
+    paddingHorizontal: 20,
+  },
+  emptyStateImage: {
+    width: 80,
+    height: 80,
+    marginBottom: 24,
+    opacity: 0.8,
+  },
+  emptyStateTitle: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: '#1E3A5F',
     marginBottom: 12,
+  },
+  emptyStateText: {
+    fontSize: 16,
+    color: '#64748B',
+    textAlign: 'center',
+    lineHeight: 24,
+    marginBottom: 32,
+  },
+  emptyStateButton: {
+    backgroundColor: '#d4af37',
+    paddingHorizontal: 32,
+    paddingVertical: 16,
+    borderRadius: 12,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
   },
-  recentGoalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  recentGoalTitle: {
+  emptyStateButtonText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#000',
-    flex: 1,
-    marginRight: 12,
-  },
-  recentGoalProgress: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#d4b038',
-  },
-  recentGoalProgressBar: {
-    height: 6,
-    backgroundColor: '#f0f0f0',
-    borderRadius: 3,
-    overflow: 'hidden',
-    marginBottom: 8,
-  },
-  recentGoalProgressFill: {
-    height: '100%',
-    backgroundColor: '#d4b038',
-    borderRadius: 3,
-  },
-  recentGoalAmount: {
-    fontSize: 12,
-    color: '#666',
-  },
-  emptyState: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 60,
-  },
-  emptyStateIcon: {
-    fontSize: 64,
-    marginBottom: 16,
-  },
-  emptyStateTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#000',
-    marginBottom: 8,
-  },
-  emptyStateText: {
-    fontSize: 14,
-    color: '#666',
-    textAlign: 'center',
-    paddingHorizontal: 40,
-    lineHeight: 20,
+    color: '#1E3A5F',
   },
   bottomSpacer: {
     height: 40,

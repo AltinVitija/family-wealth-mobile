@@ -1,16 +1,16 @@
-// screens/family/FamilyScreen.tsx
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  TouchableOpacity,
   ScrollView,
+  TouchableOpacity,
   Modal,
   TextInput,
   Alert,
   ActivityIndicator,
   RefreshControl,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useDispatch, useSelector } from 'react-redux';
@@ -22,54 +22,43 @@ import {
   createMemberStart,
   createMemberSuccess,
   createMemberFailure,
+  updateMemberStart,
+  updateMemberSuccess,
+  updateMemberFailure,
   deleteMemberStart,
   deleteMemberSuccess,
   deleteMemberFailure,
-  clearError,
 } from 'src/store/slices/familyMember/familyMemberSlice';
 import {
   getFamilyMembers,
   createFamilyMember,
+  updateFamilyMember,
   deleteFamilyMember,
 } from 'src/services/familyMember/familyMember.services';
-import { RelationshipType, CreateFamilyMemberRequest } from 'src/types/familyMember';
+import { RelationshipType } from 'src/types/familyMember';
+import { Card } from 'src/components/common/Card';
+import { EmptyState } from 'src/components/common/EmptyState';
+import { ActionButton } from 'src/components/common/ActionButton';
 
 const FamilyScreen = () => {
   const dispatch = useDispatch<AppDispatch>();
-
-  // Redux state
-  const { members, isLoading, error } = useSelector((state: RootState) => state.familyMembers);
+  const { members, isLoading } = useSelector((state: RootState) => state.familyMembers);
 
   const [isModalVisible, setIsModalVisible] = useState(false);
+  const [editingMember, setEditingMember] = useState<any>(null);
   const [refreshing, setRefreshing] = useState(false);
-
-  const [formData, setFormData] = useState<{
-    firstName: string;
-    lastName: string;
-    relationship: RelationshipType;
-    email: string;
-    phone: string;
-    dateOfBirth: string;
-  }>({
+  const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
-    relationship: 'spouse',
+    relationship: 'spouse' as RelationshipType,
     email: '',
     phone: '',
     dateOfBirth: '',
   });
 
-  // Fetch members on mount
   useEffect(() => {
     loadMembers();
   }, []);
-
-  // Show error alerts
-  useEffect(() => {
-    if (error) {
-      Alert.alert('Error', error, [{ text: 'OK', onPress: () => dispatch(clearError()) }]);
-    }
-  }, [error]);
 
   const loadMembers = async () => {
     try {
@@ -82,69 +71,25 @@ const FamilyScreen = () => {
     }
   };
 
-  const onRefresh = useCallback(async () => {
+  const onRefresh = async () => {
     setRefreshing(true);
-    try {
-      dispatch(fetchMembersStart());
-      const data = await getFamilyMembers();
-      dispatch(fetchMembersSuccess(data));
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to fetch family members';
-      dispatch(fetchMembersFailure(message));
-    } finally {
-      setRefreshing(false);
-    }
-  }, [dispatch]);
-
-  const getRelationshipColor = (relationship: RelationshipType) => {
-    const colors: Record<RelationshipType, string> = {
-      spouse: '#FF69B4',
-      child: '#87CEEB',
-      parent: '#DDA0DD',
-      sibling: '#98FB98',
-      other: '#F0E68C',
-    };
-    return colors[relationship];
+    await loadMembers();
+    setRefreshing(false);
   };
 
-  const getInitials = (firstName: string, lastName: string) => {
-    return `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase();
-  };
-
-  const validateForm = (): boolean => {
-    if (!formData.firstName.trim()) {
-      Alert.alert('Validation Error', 'Please enter first name');
-      return false;
-    }
-    if (!formData.lastName.trim()) {
-      Alert.alert('Validation Error', 'Please enter last name');
-      return false;
-    }
-    if (!formData.relationship) {
-      Alert.alert('Validation Error', 'Please select a relationship');
-      return false;
-    }
-    return true;
-  };
-
-  const handleAddMember = async () => {
-    if (!validateForm()) return;
-
-    try {
-      const memberData: CreateFamilyMemberRequest = {
-        firstName: formData.firstName.trim(),
-        lastName: formData.lastName.trim(),
-        relationship: formData.relationship,
-        email: formData.email.trim() || undefined,
-        phone: formData.phone.trim() || undefined,
-        dateOfBirth: formData.dateOfBirth.trim() || undefined,
-      };
-
-      dispatch(createMemberStart());
-      const newMember = await createFamilyMember(memberData);
-      dispatch(createMemberSuccess(newMember));
-
-      // Reset form and close modal
+  const handleOpenModal = (member?: any) => {
+    if (member) {
+      setEditingMember(member);
+      setFormData({
+        firstName: member.firstName || '',
+        lastName: member.lastName || '',
+        relationship: member.relationship || 'spouse',
+        email: member.email || '',
+        phone: member.phone || '',
+        dateOfBirth: member.dateOfBirth || '',
+      });
+    } else {
+      setEditingMember(null);
       setFormData({
         firstName: '',
         lastName: '',
@@ -153,18 +98,57 @@ const FamilyScreen = () => {
         phone: '',
         dateOfBirth: '',
       });
-      setIsModalVisible(false);
-      Alert.alert('Success', 'Family member added successfully!');
+    }
+    setIsModalVisible(true);
+  };
+
+  const handleCloseModal = () => {
+    setIsModalVisible(false);
+    setEditingMember(null);
+    setFormData({
+      firstName: '',
+      lastName: '',
+      relationship: 'spouse',
+      email: '',
+      phone: '',
+      dateOfBirth: '',
+    });
+  };
+
+  const handleSubmit = async () => {
+    if (!formData.firstName.trim() || !formData.lastName.trim()) {
+      Alert.alert('Error', 'First name and last name are required');
+      return;
+    }
+
+    try {
+      if (editingMember) {
+        dispatch(updateMemberStart());
+        const updated = await updateFamilyMember(editingMember._id, formData);
+        dispatch(updateMemberSuccess(updated));
+        Alert.alert('Success', 'Member updated successfully');
+      } else {
+        dispatch(createMemberStart());
+        const newMember = await createFamilyMember(formData);
+        dispatch(createMemberSuccess(newMember));
+        Alert.alert('Success', 'Member added successfully');
+      }
+      handleCloseModal();
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to create family member';
-      dispatch(createMemberFailure(message));
+      const message = err instanceof Error ? err.message : 'Operation failed';
+      if (editingMember) {
+        dispatch(updateMemberFailure(message));
+      } else {
+        dispatch(createMemberFailure(message));
+      }
+      Alert.alert('Error', message);
     }
   };
 
-  const handleDeleteMember = (memberId: string, memberName: string) => {
+  const handleDelete = (member: any) => {
     Alert.alert(
-      'Delete Family Member',
-      `Are you sure you want to remove ${memberName} from your family?`,
+      'Confirm Deletion',
+      `Are you sure you want to delete member "${member.firstName} ${member.lastName}"?`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -173,12 +157,13 @@ const FamilyScreen = () => {
           onPress: async () => {
             try {
               dispatch(deleteMemberStart());
-              await deleteFamilyMember(memberId);
-              dispatch(deleteMemberSuccess(memberId));
-              Alert.alert('Success', 'Family member removed successfully');
+              await deleteFamilyMember(member._id);
+              dispatch(deleteMemberSuccess(member._id));
+              Alert.alert('Success', 'Member deleted successfully');
             } catch (err) {
-              const message = err instanceof Error ? err.message : 'Failed to delete family member';
+              const message = err instanceof Error ? err.message : 'Failed to delete member';
               dispatch(deleteMemberFailure(message));
+              Alert.alert('Error', message);
             }
           },
         },
@@ -186,51 +171,34 @@ const FamilyScreen = () => {
     );
   };
 
-  const renderMemberCard = (member: any) => {
-    const fullName = `${member.firstName} ${member.lastName}`;
-    const initials = getInitials(member.firstName, member.lastName);
-
-    return (
-      <TouchableOpacity
-        key={member._id}
-        style={styles.memberCard}
-        activeOpacity={0.7}
-        onLongPress={() => handleDeleteMember(member._id, fullName)}>
-        {/* Avatar */}
-        <View style={[styles.avatar, { backgroundColor: '#d4b038' }]}>
-          <Text style={styles.avatarText}>{initials}</Text>
-        </View>
-
-        {/* Relationship Badge */}
-        <View
-          style={[
-            styles.relationshipBadge,
-            { backgroundColor: getRelationshipColor(member.relationship) },
-          ]}>
-          <Text style={styles.relationshipText}>
-            {member.relationship.charAt(0).toUpperCase() + member.relationship.slice(1)}
-          </Text>
-        </View>
-
-        {/* Member Name */}
-        <Text style={styles.memberName}>{fullName}</Text>
-
-        {/* Contact Info */}
-        {member.email && (
-          <View style={styles.contactRow}>
-            <Text style={styles.contactIcon}>✉️</Text>
-            <Text style={styles.contactText}>{member.email}</Text>
-          </View>
-        )}
-        {member.phone && (
-          <View style={styles.contactRow}>
-            <Text style={styles.contactIcon}>📞</Text>
-            <Text style={styles.contactText}>{member.phone}</Text>
-          </View>
-        )}
-      </TouchableOpacity>
-    );
+  const getRelationshipLabel = (relationship: string) => {
+    const labels: Record<string, string> = {
+      spouse: 'Spouse',
+      child: 'Child',
+      parent: 'Parent',
+      sibling: 'Sibling',
+      other: 'Other',
+    };
+    return labels[relationship] || relationship;
   };
+
+  const getRelationshipIcon = (relationship: string) => {
+    const icons: Record<string, string> = {
+      spouse: '💑',
+      child: '👶',
+      parent: '👴',
+      sibling: '👫',
+      other: '👤',
+    };
+    return icons[relationship] || '👤';
+  };
+
+  const formatDate = (dateString: string) => {
+    if (!dateString) return '';
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-GB');
+  };
+  const familyEmptyIcon = require('../../assets/icons/family-members.png'); // adjust path depth
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -238,161 +206,227 @@ const FamilyScreen = () => {
       <View style={styles.header}>
         <View>
           <Text style={styles.headerTitle}>Family Members</Text>
-          <Text style={styles.headerSubtitle}>{members.length} members</Text>
+          <Text style={styles.headerSubtitle}>Manage your family</Text>
         </View>
-        <TouchableOpacity
-          style={styles.addButton}
-          onPress={() => setIsModalVisible(true)}
-          disabled={isLoading}>
-          <Text style={styles.addButtonText}>+</Text>
+        <TouchableOpacity style={styles.addButton} onPress={() => handleOpenModal()}>
+          <Text style={styles.addButtonText}>+ Add</Text>
         </TouchableOpacity>
       </View>
 
-      {/* Members List */}
+      {/* Content */}
       <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
+        style={styles.content}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
-        {isLoading && members.length === 0 ? (
-          <ActivityIndicator size="large" color="#d4b038" style={styles.loader} />
-        ) : members.length === 0 ? (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyStateIcon}>👨‍👩‍👧‍👦</Text>
-            <Text style={styles.emptyStateText}>No family members yet</Text>
-            <Text style={styles.emptyStateSubtext}>
-              Tap the + button to add your first family member
-            </Text>
+        {isLoading && !refreshing ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#D4AF37" />
           </View>
+        ) : members.length === 0 ? (
+          <EmptyState
+            icon={familyEmptyIcon}
+            title="No Members"
+            message="Add your family members to start estate planning"
+            actionText="Add Member"
+            onAction={() => handleOpenModal()}
+          />
         ) : (
-          members.map(renderMemberCard)
+          members.map((member) => (
+            <Card key={member._id} style={styles.memberCard}>
+              {/* Centered Avatar and Name */}
+              <View style={styles.memberCenterSection}>
+                <View style={styles.memberAvatar}>
+                  <Text style={styles.avatarText}>
+                    {(member.firstName?.charAt(0) || '') + (member.lastName?.charAt(0) || '')}
+                  </Text>
+                </View>
+
+                {/* Relationship Badge */}
+                <View
+                  style={[
+                    styles.relationshipBadge,
+                    { backgroundColor: member.relationship === 'spouse' ? '#FEE2E2' : '#DBEAFE' },
+                  ]}>
+                  <Text
+                    style={[
+                      styles.relationshipBadgeText,
+                      { color: member.relationship === 'spouse' ? '#DC2626' : '#2563EB' },
+                    ]}>
+                    {member.relationship === 'spouse'
+                      ? 'Spouse'
+                      : member.relationship === 'child'
+                        ? 'Child'
+                        : member.relationship === 'parent'
+                          ? 'Parent'
+                          : member.relationship === 'sibling'
+                            ? 'Sibling'
+                            : 'Family'}
+                  </Text>
+                </View>
+
+                <Text style={styles.memberName}>
+                  {member.firstName} {member.lastName}
+                </Text>
+              </View>
+
+              {/* Contact Details */}
+              <View style={styles.memberDetails}>
+                {member.email && (
+                  <View style={styles.detailRow}>
+                    <Image
+                      source={require('../../assets/icons/mail.png')}
+                      style={styles.detailIcon}
+                    />
+                    <Text style={styles.detailText}>{member.email}</Text>
+                  </View>
+                )}
+                {member.phone && (
+                  <View style={styles.detailRow}>
+                    <Image
+                      source={require('../../assets/icons/phone.png')}
+                      style={styles.detailIcon}
+                    />
+                    <Text style={styles.detailText}>{member.phone}</Text>
+                  </View>
+                )}
+              </View>
+
+              {/* Action Buttons */}
+              <View style={styles.actionButtons}>
+                <ActionButton
+                  title="Edit"
+                  onPress={() => handleOpenModal(member)}
+                  variant="secondary"
+                  size="small"
+                  style={styles.actionButton}
+                />
+                <ActionButton
+                  title="Delete"
+                  onPress={() => handleDelete(member)}
+                  variant="danger"
+                  size="small"
+                  style={styles.actionButton}
+                />
+              </View>
+            </Card>
+          ))
         )}
       </ScrollView>
 
-      {/* Add Member Modal */}
+      {/* Create/Edit Modal */}
       <Modal
         visible={isModalVisible}
         animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => setIsModalVisible(false)}>
-        <SafeAreaView style={styles.modalContainer}>
-          <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Add Family Member</Text>
-            <TouchableOpacity onPress={() => setIsModalVisible(false)}>
-              <Text style={styles.closeButton}>✕</Text>
-            </TouchableOpacity>
-          </View>
-
-          <ScrollView style={styles.modalContent} showsVerticalScrollIndicator={false}>
-            {/* First Name */}
-            <View style={styles.formGroup}>
-              <Text style={styles.formLabel}>
-                First Name <Text style={styles.required}>*</Text>
+        transparent={true}
+        onRequestClose={handleCloseModal}>
+        <View style={styles.modalOverlay}>
+          <ScrollView contentContainerStyle={styles.modalScrollContent}>
+            <View style={styles.modalContent}>
+              <Text style={styles.modalTitle}>
+                {editingMember ? 'Edit Member' : 'Add New Member'}
               </Text>
-              <TextInput
-                style={styles.input}
-                placeholder="e.g., John"
-                value={formData.firstName}
-                onChangeText={(text) => setFormData({ ...formData, firstName: text })}
-              />
-            </View>
 
-            {/* Last Name */}
-            <View style={styles.formGroup}>
-              <Text style={styles.formLabel}>
-                Last Name <Text style={styles.required}>*</Text>
-              </Text>
-              <TextInput
-                style={styles.input}
-                placeholder="e.g., Smith"
-                value={formData.lastName}
-                onChangeText={(text) => setFormData({ ...formData, lastName: text })}
-              />
-            </View>
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>First Name *</Text>
+                <TextInput
+                  style={styles.input}
+                  value={formData.firstName}
+                  onChangeText={(text) => setFormData({ ...formData, firstName: text })}
+                  placeholder="First name"
+                  placeholderTextColor="#94A3B8"
+                />
+              </View>
 
-            {/* Relationship */}
-            <View style={styles.formGroup}>
-              <Text style={styles.formLabel}>
-                Relationship <Text style={styles.required}>*</Text>
-              </Text>
-              <View style={styles.relationshipButtons}>
-                {(['spouse', 'child', 'parent', 'sibling', 'other'] as const).map((type) => (
-                  <TouchableOpacity
-                    key={type}
-                    style={[
-                      styles.relationshipButton,
-                      formData.relationship === type && styles.relationshipButtonActive,
-                    ]}
-                    onPress={() => setFormData({ ...formData, relationship: type })}>
-                    <Text
-                      style={[
-                        styles.relationshipButtonText,
-                        formData.relationship === type && styles.relationshipButtonTextActive,
-                      ]}>
-                      {type.charAt(0).toUpperCase() + type.slice(1)}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>Last Name *</Text>
+                <TextInput
+                  style={styles.input}
+                  value={formData.lastName}
+                  onChangeText={(text) => setFormData({ ...formData, lastName: text })}
+                  placeholder="Last name"
+                  placeholderTextColor="#94A3B8"
+                />
+              </View>
+
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>Relationship</Text>
+                <View style={styles.relationshipButtons}>
+                  {(['spouse', 'child', 'parent', 'sibling', 'other'] as RelationshipType[]).map(
+                    (rel) => (
+                      <TouchableOpacity
+                        key={rel}
+                        style={[
+                          styles.relationshipButton,
+                          formData.relationship === rel && styles.relationshipButtonActive,
+                        ]}
+                        onPress={() => setFormData({ ...formData, relationship: rel })}>
+                        <Text style={styles.relationshipIcon}>{getRelationshipIcon(rel)}</Text>
+                        <Text
+                          style={[
+                            styles.relationshipText,
+                            formData.relationship === rel && styles.relationshipTextActive,
+                          ]}>
+                          {getRelationshipLabel(rel)}
+                        </Text>
+                      </TouchableOpacity>
+                    )
+                  )}
+                </View>
+              </View>
+
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>Email</Text>
+                <TextInput
+                  style={styles.input}
+                  value={formData.email}
+                  onChangeText={(text) => setFormData({ ...formData, email: text })}
+                  placeholder="email@example.com"
+                  placeholderTextColor="#94A3B8"
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                />
+              </View>
+
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>Phone</Text>
+                <TextInput
+                  style={styles.input}
+                  value={formData.phone}
+                  onChangeText={(text) => setFormData({ ...formData, phone: text })}
+                  placeholder="+355 XX XXX XXX"
+                  placeholderTextColor="#94A3B8"
+                  keyboardType="phone-pad"
+                />
+              </View>
+
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>Date of Birth (YYYY-MM-DD)</Text>
+                <TextInput
+                  style={styles.input}
+                  value={formData.dateOfBirth}
+                  onChangeText={(text) => setFormData({ ...formData, dateOfBirth: text })}
+                  placeholder="2000-01-15"
+                  placeholderTextColor="#94A3B8"
+                />
+              </View>
+
+              <View style={styles.modalActions}>
+                <ActionButton
+                  title="Cancel"
+                  onPress={handleCloseModal}
+                  variant="secondary"
+                  style={styles.modalButton}
+                />
+                <ActionButton
+                  title={editingMember ? 'Save Changes' : 'Add Member'}
+                  onPress={handleSubmit}
+                  variant="primary"
+                  loading={isLoading}
+                  style={styles.modalButton}
+                />
               </View>
             </View>
-
-            {/* Email */}
-            <View style={styles.formGroup}>
-              <Text style={styles.formLabel}>Email</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="email@example.com"
-                keyboardType="email-address"
-                autoCapitalize="none"
-                value={formData.email}
-                onChangeText={(text) => setFormData({ ...formData, email: text })}
-              />
-            </View>
-
-            {/* Phone */}
-            <View style={styles.formGroup}>
-              <Text style={styles.formLabel}>Phone</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="+1 (555) 123-4567"
-                keyboardType="phone-pad"
-                value={formData.phone}
-                onChangeText={(text) => setFormData({ ...formData, phone: text })}
-              />
-            </View>
-
-            {/* Date of Birth */}
-            <View style={styles.formGroup}>
-              <Text style={styles.formLabel}>Date of Birth (YYYY-MM-DD)</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="1990-01-15"
-                value={formData.dateOfBirth}
-                onChangeText={(text) => setFormData({ ...formData, dateOfBirth: text })}
-              />
-            </View>
           </ScrollView>
-
-          {/* Modal Actions */}
-          <View style={styles.modalActions}>
-            <TouchableOpacity
-              style={styles.cancelButton}
-              onPress={() => setIsModalVisible(false)}
-              disabled={isLoading}>
-              <Text style={styles.cancelButtonText}>Cancel</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.submitButton, isLoading && styles.submitButtonDisabled]}
-              onPress={handleAddMember}
-              disabled={isLoading}>
-              {isLoading ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text style={styles.submitButtonText}>Add Member</Text>
-              )}
-            </TouchableOpacity>
-          </View>
-        </SafeAreaView>
+        </View>
       </Modal>
     </SafeAreaView>
   );
@@ -401,7 +435,7 @@ const FamilyScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#F8FAFC',
   },
   header: {
     flexDirection: 'row',
@@ -409,220 +443,210 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 20,
     paddingVertical: 16,
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e5e5',
+    backgroundColor: '#1E3A5F',
   },
   headerTitle: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#000',
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
   headerSubtitle: {
     fontSize: 14,
-    color: '#666',
+    color: '#CBD5E1',
     marginTop: 4,
   },
   addButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: '#d4b038',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: '#D4AF37',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
   },
   addButtonText: {
-    fontSize: 28,
-    color: '#fff',
-    fontWeight: '300',
+    color: '#1E3A5F',
+    fontSize: 16,
+    fontWeight: '600',
   },
-  scrollView: {
+  content: {
     flex: 1,
-  },
-  scrollContent: {
     padding: 16,
   },
-  memberCard: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 20,
-    marginBottom: 16,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  avatar: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
+  loadingContainer: {
+    flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 12,
+    marginTop: 100,
+  },
+  memberCard: {
+    marginBottom: 16,
+    paddingVertical: 24,
+  },
+  memberCenterSection: {
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  memberAvatar: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    backgroundColor: '#D4AF37',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
   },
   avatarText: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: '#fff',
+    fontSize: 36,
+    fontWeight: '700',
+    color: '#1E3A5F',
   },
   relationshipBadge: {
     paddingHorizontal: 16,
     paddingVertical: 6,
-    borderRadius: 12,
+    borderRadius: 16,
     marginBottom: 12,
   },
-  relationshipText: {
-    fontSize: 12,
+  relationshipBadgeText: {
+    fontSize: 13,
     fontWeight: '600',
-    color: '#fff',
   },
-  memberName: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#000',
-    marginBottom: 12,
-  },
-  contactRow: {
+  memberHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 6,
-  },
-  contactIcon: {
-    fontSize: 14,
-    marginRight: 8,
-  },
-  contactText: {
-    fontSize: 14,
-    color: '#666',
-  },
-  loader: {
-    marginTop: 40,
-  },
-  emptyState: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 60,
-  },
-  emptyStateIcon: {
-    fontSize: 64,
     marginBottom: 16,
   },
-  emptyStateText: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 8,
-  },
-  emptyStateSubtext: {
-    fontSize: 14,
-    color: '#999',
-    textAlign: 'center',
-    paddingHorizontal: 40,
-  },
-  modalContainer: {
-    flex: 1,
-    backgroundColor: '#fff',
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  memberIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#EEF2FF',
+    justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e5e5',
+    marginRight: 12,
   },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#000',
+  iconText: {
+    fontSize: 28,
   },
-  closeButton: {
-    fontSize: 24,
-    color: '#666',
+  memberInfo: {
+    flex: 1,
+  },
+  memberName: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#1E3A5F',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  relationship: {
+    fontSize: 14,
+    color: '#64748B',
+  },
+  memberDetails: {
+    marginBottom: 20,
+    paddingHorizontal: 16,
+  },
+  detailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+  detailIcon: {
+    fontSize: 18,
+    marginRight: 10,
+    height: 18,
+    width: 18,
+  },
+  detailText: {
+    fontSize: 15,
+    color: '#475569',
+  },
+  actionButtons: {
+    flexDirection: 'row',
+    gap: 12,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#E2E8F0',
+  },
+  actionButton: {
+    flex: 1,
+    height: 40,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  modalScrollContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    padding: 16,
   },
   modalContent: {
-    flex: 1,
-    padding: 20,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 24,
   },
-  formGroup: {
+  modalTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#1E3A5F',
     marginBottom: 24,
   },
-  formLabel: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#000',
-    marginBottom: 8,
+  formGroup: {
+    marginBottom: 20,
   },
-  required: {
-    color: '#ff4444',
+  label: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1E3A5F',
+    marginBottom: 8,
   },
   input: {
     borderWidth: 1,
-    borderColor: '#e5e5e5',
+    borderColor: '#E2E8F0',
     borderRadius: 8,
     padding: 12,
     fontSize: 16,
-    backgroundColor: '#f9f9f9',
+    color: '#1E3A5F',
+    backgroundColor: '#F8FAFC',
   },
   relationshipButtons: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    marginTop: 8,
+    gap: 8,
   },
   relationshipButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 20,
-    backgroundColor: '#f0f0f0',
-    marginRight: 8,
-    marginBottom: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    backgroundColor: '#F8FAFC',
   },
   relationshipButtonActive: {
-    backgroundColor: '#d4b038',
+    backgroundColor: '#D4AF37',
+    borderColor: '#D4AF37',
   },
-  relationshipButtonText: {
-    fontSize: 14,
-    color: '#666',
+  relationshipIcon: {
+    fontSize: 16,
+    marginRight: 6,
   },
-  relationshipButtonTextActive: {
-    color: '#fff',
+  relationshipText: {
+    fontSize: 12,
     fontWeight: '600',
+    color: '#64748B',
+  },
+  relationshipTextActive: {
+    color: '#1E3A5F',
   },
   modalActions: {
     flexDirection: 'row',
-    padding: 20,
-    borderTopWidth: 1,
-    borderTopColor: '#e5e5e5',
     gap: 12,
+    marginTop: 24,
   },
-  cancelButton: {
+  modalButton: {
     flex: 1,
-    padding: 16,
-    borderRadius: 8,
-    backgroundColor: '#f0f0f0',
-    alignItems: 'center',
-  },
-  cancelButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#666',
-  },
-  submitButton: {
-    flex: 1,
-    padding: 16,
-    borderRadius: 8,
-    backgroundColor: '#d4b038',
-    alignItems: 'center',
-  },
-  submitButtonDisabled: {
-    opacity: 0.6,
-  },
-  submitButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#fff',
+    height: 48,
   },
 });
 

@@ -1,85 +1,56 @@
-// screens/auth/RegisterScreen.tsx
-import React, { FC, useState } from 'react';
+import React, { useState } from 'react';
 import {
-  Text,
   View,
-  TouchableWithoutFeedback,
+  Text,
+  StyleSheet,
+  TextInput,
   TouchableOpacity,
-  Platform,
-  Keyboard,
-  ScrollView,
   KeyboardAvoidingView,
+  ScrollView,
+  Platform,
   Alert,
+  Image,
+  ActivityIndicator,
 } from 'react-native';
-import clsx from 'clsx';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useDispatch, useSelector } from 'react-redux';
-
-import CustomTextInput from 'src/components/inputs/custom-textfield';
-import CustomButton from 'src/components/buttons/custom-button';
-import { ROUTES } from 'src/utils/constants';
-import { RegisterCredentials } from 'src/types/user';
-import { registerUser } from 'src/services/auth/register.services';
-import { registerStart, registerSuccess, registerFailure } from 'src/store/slices/auth/authSlice';
 import { RootState } from 'src/store';
+import { registerStart, registerSuccess, registerFailure } from 'src/store/slices/auth/authSlice';
+import { registerUser } from 'src/services/auth/register.services';
+import { ROUTES } from 'src/utils/constants';
 
-const RegisterScreen: FC = ({ navigation }: any) => {
+const RegisterScreen = ({ navigation }: any) => {
   const dispatch = useDispatch();
-
-  // Get state from Redux
   const isLoading = useSelector((state: RootState) => state.auth.isLoading);
-  const error = useSelector((state: RootState) => state.auth.error);
 
-  const [credentials, setCredentials] = useState<RegisterCredentials>({
-    name: '',
-    email: '',
-    password: '',
-    confirmPassword: '',
-    phoneNumber: '',
-    agreeToTerms: false,
-  });
-  const [isValid, setIsValid] = useState(false);
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
-  const handleNameChange = (text: string) => {
-    setCredentials({ ...credentials, name: text });
-    validateForm({ ...credentials, name: text });
+  const validateEmail = (email: string) => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
   };
 
-  const handleEmailChange = (text: string) => {
-    setCredentials({ ...credentials, email: text });
-    validateForm({ ...credentials, email: text });
-  };
-
-  const handlePasswordChange = (text: string) => {
-    setCredentials({ ...credentials, password: text });
-    validateForm({ ...credentials, password: text });
-  };
-
-  const handleConfirmPasswordChange = (text: string) => {
-    setCredentials({ ...credentials, confirmPassword: text });
-    validateForm({ ...credentials, confirmPassword: text });
-  };
-
-  const handlePhoneChange = (text: string) => {
-    setCredentials({ ...credentials, phoneNumber: text });
-    validateForm({ ...credentials, phoneNumber: text });
-  };
-
-  const validateForm = (creds: RegisterCredentials) => {
-    const isNameValid = creds.name.trim().length >= 2;
-    const isEmailValid = creds.email.trim() !== '' && creds.email.includes('@');
-    const isPasswordValid = creds.password.trim().length >= 8;
-    const doPasswordsMatch = creds.password === creds.confirmPassword && creds.password !== '';
-
-    setIsValid(isNameValid && isEmailValid && isPasswordValid && doPasswordsMatch);
-  };
+  const isValid =
+    firstName.trim().length >= 2 &&
+    lastName.trim().length >= 2 &&
+    validateEmail(email) &&
+    password.length >= 6 &&
+    password === confirmPassword;
 
   const handleRegister = async () => {
     if (!isValid) {
-      Alert.alert('Invalid Input', 'Please check all fields');
+      Alert.alert('Error', 'Please fill in all fields correctly');
       return;
     }
 
-    if (credentials.password !== credentials.confirmPassword) {
+    if (password !== confirmPassword) {
       Alert.alert('Error', 'Passwords do not match');
       return;
     }
@@ -87,154 +58,383 @@ const RegisterScreen: FC = ({ navigation }: any) => {
     try {
       dispatch(registerStart());
 
-      console.log('=== REGISTER START ===');
-      console.log('Credentials:', {
-        name: credentials.name,
-        email: credentials.email,
-        phone: credentials.phoneNumber,
-      });
+      // Create credentials object matching the backend expectations
+      const credentials = {
+        name: `${firstName} ${lastName}`,
+        email,
+        password,
+        confirmPassword,
+        phoneNumber: phone,
+        agreeToTerms: true,
+      };
 
       const response = await registerUser(credentials);
-
-      console.log('=== REGISTER SUCCESS ===');
-      console.log('Access Token:', response.accessToken);
-      console.log('Refresh Token:', response.refreshToken);
-      console.log('User:', response.user);
-
       dispatch(registerSuccess(response));
 
-      // Navigate to dashboard or profile completion
-      if (response.hasCompletedProfile) {
-        navigation.navigate(ROUTES.DASHBOARD);
-      } else {
-        navigation.navigate(ROUTES.AUTH_STACK);
-      }
+      Alert.alert('Success', 'Account created successfully! Please sign in.', [
+        {
+          text: 'OK',
+          onPress: () => navigation.navigate(ROUTES.LOGIN),
+        },
+      ]);
     } catch (error: any) {
-      console.error('=== REGISTER ERROR ===');
-      console.error('Error:', error.message);
-
-      const errorMessage = error.message || 'Registration failed. Please try again.';
+      const errorMessage = error.message || 'Registration failed';
       dispatch(registerFailure(errorMessage));
       Alert.alert('Registration Failed', errorMessage);
     }
   };
 
-  const dismissKeyboard = () => {
-    Keyboard.dismiss();
-  };
-
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      className="flex-1">
-      <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
-        <TouchableWithoutFeedback onPress={dismissKeyboard}>
-          <View className="bg-creamWhite flex w-full flex-1">
-            <View className="flex h-[15%] w-full items-end justify-end">{/* Header */}</View>
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.keyboardView}>
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled">
+          {/* Header */}
+          <View style={styles.header}>
+            <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+              <Text style={styles.backIcon}>←</Text>
+            </TouchableOpacity>
+            <Image
+              source={require('src/assets/logo.png')}
+              resizeMode="contain"
+              style={styles.logo}
+            />
+            <Text style={styles.title}>Create Account</Text>
+            <Text style={styles.subtitle}>Start managing your wealth</Text>
+          </View>
 
-            <View className="flex-1 px-4 py-8">
-              <View className="h-32 w-full items-center justify-center">
-                <Text className="text-3xl font-bold">Create Account</Text>
-                <Text className="mt-2 text-gray-600">Sign up to get started</Text>
-              </View>
-
-              <View className="w-full">
-                {/* Name Input */}
-                <CustomTextInput
-                  onChangeText={handleNameChange}
-                  label={'Full Name'}
-                  value={credentials.name}
-                  currentLength={0}
+          {/* Form */}
+          <View style={styles.form}>
+            {/* First Name */}
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>First Name *</Text>
+              <View style={styles.inputContainer}>
+                <Image source={require('src/assets/icons/user.png')} style={styles.inputIcon} />
+                <TextInput
+                  style={styles.input}
+                  value={firstName}
+                  onChangeText={setFirstName}
+                  placeholder="Your first name"
+                  placeholderTextColor="#94A3B8"
                   autoCapitalize="words"
-                  autoCorrect={false}
-                />
-
-                {/* Email Input */}
-                <CustomTextInput
-                  onChangeText={handleEmailChange}
-                  label={'Email'}
-                  value={credentials.email}
-                  errorMessage={error}
-                  currentLength={0}
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                />
-
-                {/* Phone Input (Optional) */}
-                <CustomTextInput
-                  onChangeText={handlePhoneChange}
-                  label={'Phone Number (Optional)'}
-                  value={credentials.phoneNumber}
-                  currentLength={0}
-                  keyboardType="phone-pad"
-                />
-
-                {/* Password Input */}
-                <CustomTextInput
-                  onChangeText={handlePasswordChange}
-                  secureTextEntry={true}
-                  label={'Password'}
-                  value={credentials.password}
-                  currentLength={0}
-                  autoCapitalize="none"
-                />
-
-                {/* Confirm Password Input */}
-                <CustomTextInput
-                  onChangeText={handleConfirmPasswordChange}
-                  secureTextEntry={true}
-                  label={'Confirm Password'}
-                  value={credentials.confirmPassword}
-                  currentLength={0}
-                  autoCapitalize="none"
+                  editable={!isLoading}
                 />
               </View>
-
-              {/* Password Match Indicator */}
-              {credentials.password !== '' && credentials.confirmPassword !== '' && (
-                <View className="px-4 py-2">
-                  {credentials.password === credentials.confirmPassword ? (
-                    <Text className="text-sm text-green-600">✓ Passwords match</Text>
-                  ) : (
-                    <Text className="text-sm text-red-600">✗ Passwords do not match</Text>
-                  )}
-                </View>
+              {firstName && firstName.trim().length < 2 && (
+                <Text style={styles.errorText}>Minimum 2 characters</Text>
               )}
             </View>
 
-            <View className="flex items-center justify-end px-4 py-8">
-              <View className="h-28 w-full items-center justify-center">
-                <CustomButton
-                  text={'Create Account'}
-                  clicked={isValid}
-                  itemClickedBackgroundColor={'#d4b038'}
-                  itemUnClickedBackgroundColor="#ffffff"
-                  itemClickedTextColor="#ffffff"
-                  itemUnClickedTextColor="#000000"
-                  click={handleRegister}
-                  isLoading={isLoading}
+            {/* Last Name */}
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Last Name *</Text>
+              <View style={styles.inputContainer}>
+                <Image source={require('src/assets/icons/user.png')} style={styles.inputIcon} />
+                <TextInput
+                  style={styles.input}
+                  value={lastName}
+                  onChangeText={setLastName}
+                  placeholder="Your last name"
+                  placeholderTextColor="#94A3B8"
+                  autoCapitalize="words"
+                  editable={!isLoading}
                 />
+              </View>
+              {lastName && lastName.trim().length < 2 && (
+                <Text style={styles.errorText}>Minimum 2 characters</Text>
+              )}
+            </View>
 
-                <View
-                  className={clsx(
-                    'mb-10 w-full items-center justify-center',
-                    Platform.OS === 'ios' ? 'mt-[1%]' : 'mt-[-1%]'
-                  )}>
-                  <View className="w-full flex-row items-center justify-center">
-                    <Text>Already have an account? </Text>
-                    <TouchableOpacity onPress={() => navigation.navigate(ROUTES.LOGIN)}>
-                      <Text className="font-medium text-black">Login</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
+            {/* Email */}
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Email *</Text>
+              <View style={styles.inputContainer}>
+                <Image source={require('src/assets/icons/mail.png')} style={styles.emailIcon} />
+                <TextInput
+                  style={styles.input}
+                  value={email}
+                  onChangeText={setEmail}
+                  placeholder="email@example.com"
+                  placeholderTextColor="#94A3B8"
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  editable={!isLoading}
+                />
+              </View>
+              {email && !validateEmail(email) && (
+                <Text style={styles.errorText}>Invalid email</Text>
+              )}
+            </View>
+
+            {/* Phone (Optional) */}
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Phone</Text>
+              <View style={styles.inputContainer}>
+                <Image source={require('src/assets/icons/phone.png')} style={styles.inputIcon} />
+                <TextInput
+                  style={styles.input}
+                  value={phone}
+                  onChangeText={setPhone}
+                  placeholder="+355 XX XXX XXX"
+                  placeholderTextColor="#94A3B8"
+                  keyboardType="phone-pad"
+                  editable={!isLoading}
+                />
               </View>
             </View>
+
+            {/* Password */}
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Password *</Text>
+              <View style={styles.inputContainer}>
+                <Image
+                  source={require('src/assets/icons/password.png')}
+                  style={styles.passwordIcon}
+                />
+                <TextInput
+                  style={styles.input}
+                  value={password}
+                  onChangeText={setPassword}
+                  placeholder="Minimum 6 characters"
+                  placeholderTextColor="#94A3B8"
+                  secureTextEntry={!showPassword}
+                  autoCapitalize="none"
+                  editable={!isLoading}
+                />
+                <TouchableOpacity
+                  onPress={() => setShowPassword(!showPassword)}
+                  style={styles.eyeButton}>
+                  <Image
+                    style={styles.eyeIcon}
+                    source={
+                      showPassword
+                        ? require('../../assets/icons/hide.png')
+                        : require('../../assets/icons/view.png')
+                    }
+                  />
+                </TouchableOpacity>
+              </View>
+              {password && password.length < 6 && (
+                <Text style={styles.errorText}>Minimum 6 characters</Text>
+              )}
+            </View>
+
+            {/* Confirm Password */}
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Confirm Password *</Text>
+              <View style={styles.inputContainer}>
+                <Image
+                  source={require('src/assets/icons/password.png')}
+                  style={styles.passwordIcon}
+                />
+                <TextInput
+                  style={styles.input}
+                  value={confirmPassword}
+                  onChangeText={setConfirmPassword}
+                  placeholder="Re-enter your password"
+                  placeholderTextColor="#94A3B8"
+                  secureTextEntry={!showConfirmPassword}
+                  autoCapitalize="none"
+                  editable={!isLoading}
+                />
+                <TouchableOpacity
+                  onPress={() => setShowConfirmPassword(!showConfirmPassword)}
+                  style={styles.eyeButton}>
+                  <Image
+                    style={styles.eyeIcon}
+                    source={
+                      showPassword
+                        ? require('../../assets/icons/hide.png')
+                        : require('../../assets/icons/view.png')
+                    }
+                  />
+                </TouchableOpacity>
+              </View>
+              {confirmPassword && password !== confirmPassword && (
+                <Text style={styles.errorText}>Passwords do not match</Text>
+              )}
+              {confirmPassword && password === confirmPassword && password.length >= 6 && (
+                <Text style={styles.successText}>✓ Passwords match</Text>
+              )}
+            </View>
+
+            {/* Register Button */}
+            <TouchableOpacity
+              style={[styles.registerButton, !isValid && styles.registerButtonDisabled]}
+              onPress={handleRegister}
+              disabled={!isValid || isLoading}>
+              {isLoading ? (
+                <ActivityIndicator color="#1E3A5F" />
+              ) : (
+                <Text style={styles.registerButtonText}>Create Account</Text>
+              )}
+            </TouchableOpacity>
+
+            {/* Terms Notice */}
+            <Text style={styles.termsText}>
+              By registering, you agree to our{' '}
+              <Text style={styles.termsLink}>Terms of Service</Text> and{' '}
+              <Text style={styles.termsLink}>Privacy Policy</Text>
+            </Text>
+
+            {/* Login Link */}
+            <View style={styles.loginContainer}>
+              <Text style={styles.loginText}>Already have an account? </Text>
+              <TouchableOpacity onPress={() => navigation.navigate(ROUTES.LOGIN)}>
+                <Text style={styles.loginLink}>Sign In</Text>
+              </TouchableOpacity>
+            </View>
           </View>
-        </TouchableWithoutFeedback>
-      </ScrollView>
-    </KeyboardAvoidingView>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 };
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#F8FAFC',
+    bottom: 0,
+  },
+  keyboardView: {
+    flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
+    paddingHorizontal: 24,
+  },
+  header: {
+    alignItems: 'center',
+    paddingTop: 20,
+    paddingBottom: 24,
+  },
+  backButton: {
+    position: 'absolute',
+    left: 0,
+    top: 20,
+    padding: 8,
+  },
+  backIcon: {
+    fontSize: 24,
+    color: '#1E3A5F',
+  },
+  logo: {
+    fontSize: 48,
+    marginBottom: 12,
+    height: 100,
+    width: 150,
+  },
+
+  title: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#1E3A5F',
+    marginBottom: 8,
+  },
+  subtitle: {
+    fontSize: 14,
+    color: '#64748B',
+  },
+  form: {
+    flex: 1,
+    paddingBottom: 24,
+  },
+  inputGroup: {
+    marginBottom: 16,
+  },
+  label: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1E3A5F',
+    marginBottom: 8,
+  },
+  inputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    height: 56,
+  },
+  inputIcon: {
+    width: 20,
+    height: 20,
+    marginRight: 12,
+  },
+  input: {
+    flex: 1,
+    fontSize: 16,
+    color: '#1E3A5F',
+  },
+  eyeButton: {
+    padding: 4,
+  },
+
+  errorText: {
+    fontSize: 12,
+    color: '#EF4444',
+    marginTop: 4,
+    marginLeft: 4,
+  },
+  successText: {
+    fontSize: 12,
+    color: '#10B981',
+    marginTop: 4,
+    marginLeft: 4,
+  },
+  registerButton: {
+    backgroundColor: '#D4AF37',
+    borderRadius: 12,
+    height: 56,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 8,
+    marginBottom: 16,
+  },
+  registerButtonDisabled: {
+    backgroundColor: '#E2E8F0',
+    opacity: 0.6,
+  },
+  registerButtonText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1E3A5F',
+  },
+  termsText: {
+    fontSize: 12,
+    color: '#64748B',
+    textAlign: 'center',
+    marginBottom: 16,
+    lineHeight: 18,
+  },
+  termsLink: {
+    color: '#082645',
+    fontWeight: '600',
+  },
+  loginContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loginText: {
+    fontSize: 14,
+    color: '#64748B',
+  },
+  loginLink: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#D4AF37',
+  },
+  emailIcon: { width: 20, height: 20, marginRight: 8 },
+  passwordIcon: { width: 20, height: 20, marginRight: 8 },
+  eyeIcon: { height: 20, width: 20 },
+});
 
 export default RegisterScreen;

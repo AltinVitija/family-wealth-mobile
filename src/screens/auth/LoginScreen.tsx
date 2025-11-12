@@ -1,173 +1,327 @@
-import React, { FC, useState } from 'react';
+import React, { useState } from 'react';
 import {
-  Text,
   View,
-  TouchableWithoutFeedback,
+  Text,
+  StyleSheet,
+  TextInput,
   TouchableOpacity,
-  Platform,
-  Keyboard,
-  ScrollView,
   KeyboardAvoidingView,
+  ScrollView,
+  Platform,
+  Image,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
-
-import clsx from 'clsx';
-import { useRoute } from '@react-navigation/native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useDispatch, useSelector } from 'react-redux';
-
-import { theme } from '../../../tailwind.config';
-import CustomTextInput from 'src/components/inputs/custom-textfield';
-import CustomButton from 'src/components/buttons/custom-button';
-import { ROUTES } from 'src/utils/constants';
-import { LoginCredentials } from 'src/types/user';
-import { loginUser } from 'src/services/auth/login.services';
+import { RootState } from 'src/store';
 import { loginStart, loginSuccess, loginFailure } from 'src/store/slices/auth/authSlice';
-import { RootState } from 'src/store'; // Add your store type
-import { API_URL } from 'src/services/api';
+import { loginUser } from 'src/services/auth/login.services';
+import { ROUTES } from 'src/utils/constants';
 
-const LoginScreen: FC = ({ navigation }: any) => {
-  const route = useRoute();
+const LoginScreen = ({ navigation }: any) => {
   const dispatch = useDispatch();
-
-  // Get state from Redux
   const isLoading = useSelector((state: RootState) => state.auth.isLoading);
-  const error = useSelector((state: RootState) => state.auth.error);
 
-  const [userCredentials, setUserCredentials] = useState<LoginCredentials>({
-    email: '',
-    password: '',
-  });
-  const [isValid, setIsValid] = useState(false);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
 
-  const handleEmailChange = (text: string) => {
-    setUserCredentials({ ...userCredentials, email: text });
-    validateForm(text, userCredentials.password); // Fixed: correct parameter order
+  const validateEmail = (email: string) => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
   };
 
-  const handlePasswordChange = (text: string) => {
-    setUserCredentials({ ...userCredentials, password: text });
-    validateForm(userCredentials.email, text); // Fixed: correct parameter order
-  };
+  const isValid = validateEmail(email) && password.length >= 6;
 
-  const validateForm = (email: string, password: string) => {
-    const isEmailValid = email.trim() !== '' && email.includes('@');
-    const isPasswordValid = password.trim().length >= 8;
-    setIsValid(isEmailValid && isPasswordValid);
-  };
-
-  // LoginScreen.tsx - Add logging
   const handleLogin = async () => {
     if (!isValid) {
-      Alert.alert('Invalid Input', 'Please check your email and password');
+      Alert.alert('Error', 'Please check your email and password');
       return;
     }
 
     try {
       dispatch(loginStart());
-      const response = await loginUser(userCredentials);
-
-      // ✅ Log tokens for testing
-      console.log('=== LOGIN SUCCESS ===');
-      console.log('Access Token:', response.accessToken);
-      console.log('Refresh Token:', response.refreshToken);
-      console.log('Has Completed Profile:', response.hasCompletedProfile);
-      // console.log('User:', response.);
-
+      const response = await loginUser({ email, password });
       dispatch(loginSuccess(response));
 
-      if (response.hasCompletedProfile) {
-        navigation.navigate(ROUTES.DASHBOARD);
-      } else {
-        navigation.navigate(ROUTES.AUTH_STACK);
-      }
+      // Navigation is handled by the root navigator based on auth state
     } catch (error: any) {
-      const errorMessage = error.message || 'Wrong credentials. Please try again.';
+      const errorMessage = error.message || 'Invalid credentials';
       dispatch(loginFailure(errorMessage));
       Alert.alert('Login Failed', errorMessage);
     }
   };
-  const dismissKeyboard = () => {
-    Keyboard.dismiss();
-  };
 
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      className="position-absolute flex-1">
-      <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
-        <TouchableWithoutFeedback onPress={dismissKeyboard}>
-          <View className="bg-creamWhite flex w-full flex-1">
-            <View className="flex h-[15%] w-full items-end justify-end">
-              {/* <CustomHeader onPress={() => navigation.goBack()} /> */}
-            </View>
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.keyboardView}>
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled">
+          {/* Header */}
+          <View style={styles.header}>
+            <Image
+              source={require('src/assets/logo.png')}
+              resizeMode="contain"
+              style={styles.logo}
+            />
+          </View>
 
-            <View className="flex-1 px-4 py-8">
-              <View className="h-64 w-full items-center justify-center">
-                {/* <LogoMemora /> */}
-              </View>
-
-              <View className="w-full">
-                <CustomTextInput
-                  onChangeText={handleEmailChange}
-                  label={'Email'}
-                  value={userCredentials.email}
-                  errorMessage={error} // Show error from Redux
-                  currentLength={0}
+          {/* Form */}
+          <View style={styles.form}>
+            {/* Email Input */}
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Email</Text>
+              <View style={styles.inputContainer}>
+                <Image source={require('src/assets/icons/mail.png')} style={styles.emailIcon} />
+                <TextInput
+                  style={styles.input}
+                  value={email}
+                  onChangeText={setEmail}
+                  placeholder="email@example.com"
+                  placeholderTextColor="#94A3B8"
                   keyboardType="email-address"
                   autoCapitalize="none"
                   autoCorrect={false}
-                />
-                <CustomTextInput
-                  onChangeText={handlePasswordChange}
-                  secureTextEntry={true}
-                  label={'Password'}
-                  value={userCredentials.password}
-                  currentLength={0}
-                  autoCapitalize="none"
+                  editable={!isLoading}
                 />
               </View>
-
-              <View className="mb-6 mt-[-3%] w-full flex-row items-center justify-end">
-                {/* <TouchableOpacity
-                  className="mr-6 h-5 items-center justify-center"
-                  onPress={() => navigation.navigate(ROUTES.F)}>
-                  <Text className="font-medium text-black">Forgot Password?</Text>
-                </TouchableOpacity> */}
-              </View>
+              {email && !validateEmail(email) && (
+                <Text style={styles.errorText}>Invalid email</Text>
+              )}
             </View>
 
-            <View className="flex flex-1 items-center justify-end px-4 py-8">
-              <View className="h-28 w-full items-center justify-center">
-                <CustomButton
-                  text={'Login'}
-                  clicked={isValid} // Enable button only when form is valid
-                  itemClickedBackgroundColor={'#d4b038'}
-                  itemUnClickedBackgroundColor="#ffffff"
-                  itemClickedTextColor="#ffffff"
-                  itemUnClickedTextColor="#000000"
-                  click={handleLogin} // Fixed: use handleLogin function
-                  isLoading={isLoading} // Show loading from Redux
+            {/* Password Input */}
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Password</Text>
+              <View style={styles.inputContainer}>
+                <Image
+                  source={require('src/assets/icons/password.png')}
+                  style={styles.passwordIcon}
                 />
 
-                <View
-                  className={clsx(
-                    'mb-10 w-full items-center justify-center',
-                    Platform.OS === 'ios' ? 'mt-[1%]' : 'mt-[-1%]'
-                  )}>
-                  <View className="w-full flex-row items-center justify-center">
-                    <Text>Dont have an account yet? </Text>
-                    <TouchableOpacity onPress={() => navigation.navigate(ROUTES.REGISTER)}>
-                      <Text className="font-medium text-black">Register</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
+                <TextInput
+                  style={styles.input}
+                  value={password}
+                  onChangeText={setPassword}
+                  placeholder="Enter your password"
+                  placeholderTextColor="#94A3B8"
+                  secureTextEntry={!showPassword}
+                  autoCapitalize="none"
+                  editable={!isLoading}
+                />
+                <TouchableOpacity
+                  onPress={() => setShowPassword(!showPassword)}
+                  style={styles.eyeButton}>
+                  <Image
+                    source={
+                      showPassword
+                        ? require('../../assets/icons/hide.png')
+                        : require('../../assets/icons/view.png')
+                    }
+                    style={styles.eyeIcon}
+                  />
+                </TouchableOpacity>
               </View>
+              {password && password.length < 6 && (
+                <Text style={styles.errorText}>Minimum 6 characters</Text>
+              )}
+            </View>
+
+            {/* Forgot Password */}
+            <TouchableOpacity
+              style={styles.forgotPassword}
+              onPress={() => navigation.navigate('ForgotPassword')}>
+              <Text style={styles.forgotPasswordText}>Forgot password?</Text>
+            </TouchableOpacity>
+
+            {/* Login Button */}
+            <TouchableOpacity
+              style={[styles.loginButton, !isValid && styles.loginButtonDisabled]}
+              onPress={handleLogin}
+              disabled={!isValid || isLoading}>
+              {isLoading ? (
+                <ActivityIndicator color="#1E3A5F" />
+              ) : (
+                <Text style={styles.loginButtonText}>Sign In</Text>
+              )}
+            </TouchableOpacity>
+
+            {/* Divider */}
+            <View style={styles.divider}>
+              <View style={styles.dividerLine} />
+              <Text style={styles.dividerText}>OR</Text>
+              <View style={styles.dividerLine} />
+            </View>
+
+            {/* Register Link */}
+            <View style={styles.registerContainer}>
+              <Text style={styles.registerText}>Don&apos;t have an account? </Text>
+              <TouchableOpacity onPress={() => navigation.navigate(ROUTES.REGISTER)}>
+                <Text style={styles.registerLink}>Sign Up</Text>
+              </TouchableOpacity>
             </View>
           </View>
-        </TouchableWithoutFeedback>
-      </ScrollView>
-    </KeyboardAvoidingView>
+
+          {/* Footer */}
+          <View style={styles.footer}>
+            <Text style={styles.footerText}>Family Wealth Management</Text>
+            <Text style={styles.footerVersion}>Version 1.0.0</Text>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 };
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#F8FAFC',
+  },
+  keyboardView: {
+    flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
+    paddingHorizontal: 24,
+  },
+  header: {
+    alignItems: 'center',
+    paddingTop: 40,
+    paddingBottom: 32,
+  },
+  logo: {
+    fontSize: 64,
+    marginBottom: 16,
+    height: 150,
+    width: 150,
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: '700',
+    color: '#1E3A5F',
+    marginBottom: 8,
+  },
+  subtitle: {
+    fontSize: 16,
+    color: '#64748B',
+  },
+  form: {
+    flex: 1,
+  },
+  inputGroup: {
+    marginBottom: 20,
+  },
+  label: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1E3A5F',
+    marginBottom: 8,
+  },
+  inputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    height: 56,
+  },
+  inputIcon: {
+    fontSize: 20,
+    marginRight: 12,
+  },
+  input: {
+    flex: 1,
+    fontSize: 16,
+    color: '#1E3A5F',
+  },
+  eyeButton: {
+    padding: 4,
+  },
+  eyeIcon: { height: 20, width: 20 },
+  errorText: {
+    fontSize: 12,
+    color: '#EF4444',
+    marginTop: 4,
+    marginLeft: 4,
+  },
+  forgotPassword: {
+    alignSelf: 'flex-end',
+    marginBottom: 24,
+  },
+  forgotPasswordText: {
+    fontSize: 14,
+    color: '#082645',
+    fontWeight: '600',
+  },
+  loginButton: {
+    backgroundColor: '#D4AF37',
+    borderRadius: 12,
+    height: 56,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  loginButtonDisabled: {
+    backgroundColor: '#E2E8F0',
+    opacity: 0.6,
+  },
+  emailIcon: { width: 20, height: 20, marginRight: 8 },
+  passwordIcon: { width: 20, height: 20, marginRight: 8 },
+  loginButtonText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1E3A5F',
+  },
+  divider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#E2E8F0',
+  },
+  dividerText: {
+    fontSize: 12,
+    color: '#94A3B8',
+    marginHorizontal: 16,
+    fontWeight: '600',
+  },
+  registerContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  registerText: {
+    fontSize: 14,
+    color: '#64748B',
+  },
+  registerLink: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#D4AF37',
+  },
+  footer: {
+    alignItems: 'center',
+    paddingVertical: 24,
+  },
+  footerText: {
+    fontSize: 12,
+    color: '#94A3B8',
+    marginBottom: 4,
+  },
+  footerVersion: {
+    fontSize: 10,
+    color: '#CBD5E1',
+  },
+});
 
 export default LoginScreen;
