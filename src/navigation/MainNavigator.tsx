@@ -5,10 +5,10 @@ import { ROUTES } from 'src/utils/constants';
 import { MainTabParamList } from 'src/types/navigation';
 
 // Screens
-import DashboardScreen from 'src/screens/dashboard/DashboardScreenImproved';
-import EstateScreen from 'src/screens/estate/EstateScreenImproved';
-import GoalsScreen from 'src/screens/goals/GoalsScreenImproved';
-import FamilyScreen from 'src/screens/family/FamilyScreenImproved';
+import DashboardScreen from 'src/screens/dashboard/DashboardScreen';
+import EstateScreen from 'src/screens/estate/EstateScreen';
+import GoalsScreen from 'src/screens/goals/GoalsScreen';
+import FamilyScreen from 'src/screens/family/FamilyScreen';
 import SettingsScreen from 'src/screens/settings/SettingsScreen';
 
 const Tab = createBottomTabNavigator<MainTabParamList>();

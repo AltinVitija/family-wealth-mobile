@@ -2,8 +2,8 @@ import React from 'react';
 import { createStackNavigator } from '@react-navigation/stack';
 import { ROUTES } from 'src/utils/constants';
 import { AuthStackParamList } from '../types/navigation';
-import LoginScreen from 'src/screens/auth/LoginScreenImproved';
-import RegisterScreen from 'src/screens/auth/RegisterScreenImproved';
+import LoginScreen from 'src/screens/auth/LoginScreen';
+import RegisterScreen from 'src/screens/auth/RegisterScreen';
 import ForgotPassword from 'src/screens/auth/ForgotPassword';
 import ResetPassword from 'src/screens/auth/ResetPassword';
 
